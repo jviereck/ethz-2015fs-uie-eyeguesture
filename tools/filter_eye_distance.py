@@ -25,7 +25,7 @@ CSV_HEADER = "bioid_number;0x;0y;1x;1y;2x;2y;3x;3y;4x;4y;5x;5y;6x;6y;7x;7y;8x;8y
 
 if __name__ == '__main__':
     # Read the landmarks.csv file and ignore the header to end up with a 2d array.
-    data = np.genfromtxt('landmarks.csv', delimiter=';', skip_header=1)
+    data = np.genfromtxt('landmarks.csv', delimiter=',', skip_header=1)
 
     eye_vector = data[:,1:3] - data[:,3:5]
 
@@ -40,7 +40,7 @@ if __name__ == '__main__':
         target_indices.shape[0], MIN_EYE_DISTANCE, MAX_EYE_DISTANCE)
 
     # Write out the filtered landmarks into a new CSV file.
-    np.savetxt("landmarks_filtered.csv", data[target_indices], delimiter=";", fmt="%.3f", header=CSV_HEADER)
+    np.savetxt("landmarks_filtered.csv", data[target_indices], delimiter=",", fmt="%.3f", header=CSV_HEADER)
 
 
 
