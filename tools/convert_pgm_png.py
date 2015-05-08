@@ -12,7 +12,6 @@ Usage:
     print(usage)
 
 if __name__ == '__main__':
-    print 'hello world'
     if (len(sys.argv) == 1):
         print_usage()
         sys.exit(1)
@@ -27,7 +26,6 @@ if __name__ == '__main__':
 
     for file_name in file_names:
         im = Image.open(join(input_dir, file_name))
-        # im = im.convert('RGB')
         im.save(file_name + '.png')
 
 
