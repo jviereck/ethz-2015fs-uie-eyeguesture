@@ -40,3 +40,17 @@ $ cd tools
 $ python copy_filtered_images.py
 ```
 
+## Using liblinear
+
+To install the `liblinear` library on OSX using Homebrew, run:
+
+```bash
+$ brew install liblinear
+```
+
+The liblinear repo comes with a [python wrapper](https://github.com/ninjin/liblinear/tree/master/python), which was imported under `liblinear/`.
+
+# Useful references
+
+- Face Alignment implementation using Matlab: https://github.com/jwyang/face-alignment
+
