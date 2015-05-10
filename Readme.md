@@ -50,6 +50,42 @@ $ brew install liblinear
 
 The liblinear repo comes with a [python wrapper](https://github.com/ninjin/liblinear/tree/master/python), which was imported under `liblinear/`.
 
+## Coordinate systems
+
+The x/y coordinates from the BioId are encoded as follows
+
+```
+  0----> x
+  |
+  | y
+  v
+```
+
+The data read via the scipy.misc method is using the coordiante system as follows:
+
+```python
+#  0----> y
+#  |
+#  | x
+#  v
+
+data = misc.imread(join(img_root_path, 'BioID_%04d.pgm' % (img_id)))
+pixel_value = data[x, y]
+```
+
+When the read `data` object is reshaped to a one-dimensional-array, then the array
+index goes along the y coordinate first:
+
+```python
+# Reshaping the data.
+reshaped_data = data.reshape(data.shape[0] * data.shape[1]);
+
+# Then the following assertion holds connecting the original data shape and
+# the resulting reshaped data:
+idx = y + x * data.shape[1];
+assert data[x, y] == reshaped_data[idx]
+```
+
 # Useful references
 
 - Face Alignment implementation using Matlab: https://github.com/jwyang/face-alignment
