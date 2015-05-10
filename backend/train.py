@@ -160,11 +160,7 @@ def compute_split_node(img_data, indices, landmark_residual, approx_landmark,
     var_red_total = var_red_xy(landmark_residual)
 
     var_reduce_best = 0
-    best_found = None
-    lhs_indices_best = None
-    rhs_indices_best = None
-    threshold_best = None
-    feature_best = None
+    best_result = None
 
     for i in range(num_sample):
         # Pick the threshold randomly from the pixel values.
@@ -180,16 +176,12 @@ def compute_split_node(img_data, indices, landmark_residual, approx_landmark,
         if var_reduce > var_reduce_best:
             var_reduce_best = var_reduce
 
-            lhs_indices_best = lhs_indices
-            rhs_indices_best = rhs_indices
-            threshold_best = threshold
-            feature_best = i
+            best_result = (i, threshold, lhs_indices, rhs_indices)
 
+    assert best_result != None, "A best choice for the threshold was not found."
 
-    assert threshold_best != None, "A best choice for the threshold was not found."
-
-    return (threshold_best, offsets[feature_best][0], offsets[feature_best][1]),  \
-        lhs_indices_best, rhs_indices_best
+    return (best_result[1], offsets[best_result[0]][0], offsets[best_result[1]][1]),  \
+        best_result[2], best_result[3]
 
 
 def print_usage():

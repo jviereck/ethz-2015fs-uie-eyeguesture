@@ -86,6 +86,15 @@ idx = y + x * data.shape[1];
 assert data[x, y] == reshaped_data[idx]
 ```
 
+## Start the training process
+
+Training the system is done by invoking the `backend/train.py` python script and passing in a CSV file containing the image-ids to train and the landmarks of these training images. Such a CSV file can be obtained by running `tools/filter_eye_distance.py`.
+
+```bash
+$ cd backend
+$ python train.py ../tools/landmarks_filtered.csv ../../bioid_data/BioID-FaceDatabase-V1.2
+```
+
 # Useful references
 
 - Face Alignment implementation using Matlab: https://github.com/jwyang/face-alignment
