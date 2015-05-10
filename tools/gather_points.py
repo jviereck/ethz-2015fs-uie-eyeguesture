@@ -64,7 +64,7 @@ if __name__ == '__main__':
         file_content = read_file_to_string(join(input_dir, file_name))
         points = [f.strip().split(' ') for f in file_content.split('\n')[3:23]]
 
-        res.append(file_name[6:10] + ';' + ';'.join(flatten_list(points)))
+        res.append(file_name[6:10] + ',' + ','.join(flatten_list(points)))
 
     f = open('landmarks.csv', 'w')
     f.write('\n'.join(res))
