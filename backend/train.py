@@ -4,13 +4,18 @@ from scipy import misc
 import numpy as np
 import sys
 
+from liblinear.liblinearutil import train as liblinear_train
+from liblinear.liblinear import problem as liblinear_problem
+from liblinear.liblinear import parameter as liblinear_parameter
+
 import time
 
 # A set of basic configurations for the learning
 param = {
     # Training image dimensions.
-    'width': 384,
-    'height': 286
+    'img_width': 384,
+    'img_height': 286,
+    'num_sample': 100
 }
 
 _last_log = None
@@ -51,8 +56,8 @@ def read_images(img_ids, img_root_path):
         data = misc.imread(join(img_root_path, 'BioID_%04d.pgm' % (img_id)))
 
         # Check the image we get fits the expected dimensions.
-        assert data.shape[0] == param['height']
-        assert data.shape[1] == param['width']
+        assert data.shape[0] == param['img_height']
+        assert data.shape[1] == param['img_width']
 
         # Convert the image data to signed-int16 type and reshape to a single
         # dimensional array to make indexing during pixel-feature computation
@@ -117,16 +122,21 @@ def var_red(arr):
     return 0.5 * (1.0/N) * np.sum((n - n.T)**2)
 
 def var_red_xy(arr_xy):
-    return np.sqrt(var_red(arr_xy[:,0]) ** 2 + var_red(arr_xy[:,1]) ** 2)
+    # return np.sqrt(var_red(arr_xy[:,0]) ** 2 + var_red(arr_xy[:,1]) ** 2)
+    return var_red(arr_xy[:,0]) + var_red(arr_xy[:,1])
 
 def flatten_list(aList):
     return [y for x in aList for y in x]
 
-def compute_split_node(img_data, indices, landmark_residual, approx_landmark,
+def compute_split_node(img_data, indices, full_landmark_residual, full_approx_landmark,
         radius, num_sample, img_width, img_height):
     """Comptues a split node using random sampling.
 
     """
+
+    # Create a copy of the landmark data that is indiced by this function call.
+    landmark_residual = full_landmark_residual[indices]
+    approx_landmark = full_approx_landmark[indices]
 
     assert indices.__class__ == np.ndarray, "Expect indices to be an np.array."
 
@@ -155,8 +165,6 @@ def compute_split_node(img_data, indices, landmark_residual, approx_landmark,
     # To compute the variance reductinon, see the forumular here:
     # http://en.wikipedia.org/wiki/Decision_tree_learning#Variance_reduction
 
-    # var_total = compute_var(landmark_residual)
-
     var_red_total = var_red_xy(landmark_residual)
 
     var_reduce_best = 0
@@ -166,22 +174,121 @@ def compute_split_node(img_data, indices, landmark_residual, approx_landmark,
         # Pick the threshold randomly from the pixel values.
         threshold = np.random.choice(pixel_diffs[i])
 
-        lhs_indices = np.where(pixel_diffs[i] < threshold)
-        rhs_indices = np.where(pixel_diffs[i] >= threshold)
+        lhs_indices = np.where(pixel_diffs[i] < threshold)[0]
+        rhs_indices = np.where(pixel_diffs[i] >= threshold)[0]
 
         var_reduce = var_red_total - \
             var_red_xy(landmark_residual[lhs_indices]) - \
             var_red_xy(landmark_residual[rhs_indices])
 
-        if var_reduce > var_reduce_best:
+        if var_reduce > var_reduce_best or best_result == None:
             var_reduce_best = var_reduce
 
             best_result = (i, threshold, lhs_indices, rhs_indices)
 
     assert best_result != None, "A best choice for the threshold was not found."
 
-    return (best_result[1], offsets[best_result[0]][0], offsets[best_result[1]][1]),  \
-        best_result[2], best_result[3]
+    # Convert the local indices to global-all-images indices back again.
+    best_offsets = offsets[best_result[0]]
+    return [int(best_result[1]), best_offsets[0][0], best_offsets[0][1], \
+        best_offsets[1][0], best_offsets[1][0]],  \
+        indices[best_result[2]], indices[best_result[3]]
+
+def assert_single_landmark(landmark):
+    assert len(landmark.shape) == 2
+    assert landmark.shape[1] == 2
+
+class TreeClassifier:
+    def __init__(self, depth, debug=False):
+        self.depth = depth
+        self.debug = debug
+
+        self.node_data = None
+        self.train_data_leafs = None
+
+    def train_node(self, level, idx, img_data, param, radius, indices, \
+        landmark_residual, landmark_approx):
+
+        if self.debug:
+            print ''
+            print '=== Train node: level=%d idx=%d' % (level, idx)
+
+        split_data, lhs_indices, rhs_indices = compute_split_node( \
+            img_data, indices, landmark_residual, landmark_approx, \
+            radius, param['num_sample'], param['img_width'], param['img_height'])
+
+        if self.debug:
+            print split_data, lhs_indices, rhs_indices
+
+        self.node_data[idx] = split_data
+
+        nodes_level_left = idx - (pow(2, level) - 1)
+        nodes_level_right = (pow(2, level + 1) - 2) - idx
+
+        idx_lhs = idx + nodes_level_right + 2 * nodes_level_left + 1
+        idx_rhs = idx_lhs + 1
+
+        # Early exit if the full depth of the tree was learned.
+        if (level + 1 == self.depth):
+            # Compute the offsets to set the a one for the local binary features.
+            offset_lhs = idx_lhs - (pow(2, level + 1) - 1)
+            offset_rhs = offset_lhs + 1
+
+            # Set the binary features for the lhs and rhs indices.
+            self.train_data_leafs[lhs_indices, offset_lhs] = 1
+            self.train_data_leafs[rhs_indices, offset_rhs] = 1
+            return
+
+        self.train_node(level + 1, idx_lhs, img_data, param, radius, lhs_indices,
+            landmark_residual, landmark_approx)
+        self.train_node(level + 1, idx_rhs, img_data, param, radius, rhs_indices,
+            landmark_residual, landmark_approx)
+
+    def fit(self, img_data, param, radius, landmark, landmark_approx):
+        assert_single_landmark(landmark)
+        assert_single_landmark(landmark_approx)
+
+        # Need to have 'depth - 1' node_data only, as the leafs don't have
+        self.node_data = range(pow(2, self.depth) - 1) # Allocate list for later node data
+
+        # Allocate matrix that will hold the binary local features for this tree.
+        # The entires are set when the leafs are reached during the call to 'train_node'.
+        self.train_data_leafs = np.zeros((landmark.shape[0], pow(2, self.depth + 1)))
+
+        landmark_residual = landmark - landmark_approx
+
+        # The root note tains over all possible images - therefore use all indices.
+        indices = np.array(range(landmark.shape[0]))
+
+        # Start training the root note.
+        self.train_node(0, 0, img_data, param, radius, indices, \
+            landmark_residual, landmark_approx)
+
+        return self.train_data_leafs
+
+class RandomForestClassifier:
+    def __init__(self, depth=5, n_tree=5, debug=False):
+        self.depth = depth
+        self.n_tree = n_tree
+        self.debug = debug
+
+    def fit(self, img_data, param, radius, landmark, landmark_approx):
+        self.tree_classifiers = []
+        for i in range(self.n_tree):
+            self.tree_classifiers.append(TreeClassifier(self.depth, self.debug))
+
+        res = []
+        for classifier in self.tree_classifiers:
+            res.append(classifier.fit(img_data, param, radius, landmark, landmark_approx))
+
+        # Return the concatinated binary features of all the tree classifiers.
+        return np.hstack(res);
+
+    def serialize(self):
+        # TODO: Convert the node_data on the trees into a JSON format for later
+        #   reloading / classification in the browser.
+        pass
+
 
 
 def print_usage():
@@ -196,29 +303,65 @@ if __name__ == '__main__':
         print_usage()
         sys.exit(1)
 
+    # Fix the random seed to get reproducable results.
+    np.random.seed(42)
 
     log('Processing landmarks')
-    img_ids, landmarks, approx_landmarks = read_landmark_csv(sys.argv[1])
+    img_ids, landmarks, landmarks_approx = read_landmark_csv(sys.argv[1])
 
     log('Loading image data')
     img_data = read_images(img_ids, sys.argv[2])
 
     log('Compute single split node')
 
-    # Compute the initial residual landmarks.
-    landmark_residual = landmarks - approx_landmarks
 
     # Example training for the first landmark over all images:
-    indices = np.array(range(landmarks.shape[0]))
-    landmark_residual = landmark_residual[:,0]
-    approx_landmark = approx_landmarks[:,0]
-    radius = 10
-    num_sample = 500
+    radius = 10.0
 
-    res = compute_split_node(img_data, indices, landmark_residual, approx_landmark, \
-        radius, num_sample, param['width'], param['height'])
+    for iter in range(5):
+        res = []
+        for mark_idx in range(landmarks.shape[1]):
+        # for mark_idx in range(2):
+            print 'Train landmark %d/%d' % (mark_idx, landmarks.shape[1])
 
-    print res
+            # NOTE: depth = number of split nodes -> the leafs are on 'depth + 1' level!
+            rf = RandomForestClassifier(depth=3, n_tree=5)
+            res.append(rf.fit(img_data, param, radius, landmarks[:, mark_idx], landmarks_approx[:,mark_idx]))
+
+        # Get the concatinated global feature mapping PHI over all the single
+        # landmarks local binary features
+        global_feature_mapping = np.hstack(res)
+
+        landmarks_residual = (landmarks - landmarks_approx).reshape(-1, 40)
+
+        # How to call into liblinear is mostly inspired by:
+        # https://github.com/jwyang/face-alignment/blob/master/src/globalregression.m
+        cost = 1.0/global_feature_mapping.shape[1]
+        x_list = global_feature_mapping.tolist()
+
+        # Note: Instead of solving the entire matrix system at once here, solving
+        #       one residual coordinate after the other to obtain a single column
+        #       of the final 'W' matrix at the end. Glying the 'W' matrix together
+        #       on line (*) below.
+        res = []
+        for i in range(landmarks_residual.shape[1]):
+            y_list = landmarks_residual[:,i].tolist()
+
+            model = liblinear_train(y_list, x_list, '-s 12 -p 0 -c %f -q' % (cost))
+
+            # Copy the result model 'w' data to an numpy array and append the obtained
+            # 'w' column to the 'res' array.
+            res.append(np.fromiter(model.w, dtype=np.double, count=global_feature_mapping.shape[1]))
+
+        W = np.vstack(res).T  # Glue together the entire 'W' matrix (*).
+
+        # Now that the global 'W' matrix was calculated, compute the shifts of the
+        # landmarks by applying the binary global feature mapping to the matrix.
+        # Need to reshape the result to a 2d vector again.
+        landmarks_shifts = np.dot(global_feature_mapping, W).reshape((-1, 20,2))
+
+        # Update the landmark approximations
+        landmarks_approx = landmarks_approx + landmarks_shifts
 
     log_finish()
 

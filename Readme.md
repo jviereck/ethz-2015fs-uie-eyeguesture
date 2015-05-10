@@ -95,6 +95,10 @@ $ cd backend
 $ python train.py ../tools/landmarks_filtered.csv ../../bioid_data/BioID-FaceDatabase-V1.2
 ```
 
+# TODOS
+
+- center the images before starting the training
+
 # Useful references
 
 - Face Alignment implementation using Matlab: https://github.com/jwyang/face-alignment
