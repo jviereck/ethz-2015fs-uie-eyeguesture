@@ -15,11 +15,14 @@ param = {
     # Training image dimensions.
     'img_width': 384,
     'img_height': 286,
-    'num_sample': 100
+    'num_sample': 500
 }
 
 _last_log = None
 _last_task = None
+
+def flatten_list(aList):
+    return [y for x in aList for y in x]
 
 def log_finish():
     if _last_log != None:
@@ -80,7 +83,6 @@ def clip_cord(coordinate, img_width, img_height):
 def get_random_offset_pixel_values(img_data, indices, approx_landmark, radius,
     img_width, img_height):
 
-
     img_pixels = img_width * img_height
 
     # Sample a random offset vector within the given radius.
@@ -111,22 +113,17 @@ def var_red(arr):
 
     # import pdb
     # pdb.set_trace()
-
     N = float(len(arr))
 
-    if N == 0:
+    if N == 0.0:
         return 0.0
 
     n = np.tile(arr, N).reshape(-1, N)
-
     return 0.5 * (1.0/N) * np.sum((n - n.T)**2)
 
 def var_red_xy(arr_xy):
     # return np.sqrt(var_red(arr_xy[:,0]) ** 2 + var_red(arr_xy[:,1]) ** 2)
     return var_red(arr_xy[:,0]) + var_red(arr_xy[:,1])
-
-def flatten_list(aList):
-    return [y for x in aList for y in x]
 
 def compute_split_node(img_data, indices, full_landmark_residual, full_approx_landmark,
         radius, num_sample, img_width, img_height):
@@ -171,8 +168,16 @@ def compute_split_node(img_data, indices, full_landmark_residual, full_approx_la
     best_result = None
 
     for i in range(num_sample):
-        # Pick the threshold randomly from the pixel values.
-        threshold = np.random.choice(pixel_diffs[i])
+        # Pick the threshold randomly from the pixel values. Pick more points
+        # in the center to avoid very small splits.
+        # threshold = np.random.choice(pixel_diffs[i])
+
+        sorted_pixel_diffs = np.sort(pixel_diffs[i])
+        ind = np.floor(len(sorted_pixel_diffs) * (0.5 + 0.7*(np.random.rand() - 0.5)))
+        # print ind, len(sorted_pixel_diffs)
+
+        threshold = sorted_pixel_diffs[ind]
+
 
         lhs_indices = np.where(pixel_diffs[i] < threshold)[0]
         rhs_indices = np.where(pixel_diffs[i] >= threshold)[0]
@@ -206,6 +211,14 @@ class TreeClassifier:
         self.node_data = None
         self.train_data_leafs = None
 
+    def get_child_idx(self, level, idx):
+        nodes_level_left = idx - (pow(2, level) - 1)
+        nodes_level_right = (pow(2, level + 1) - 2) - idx
+
+        idx_lhs = idx + nodes_level_right + 2 * nodes_level_left + 1
+        idx_rhs = idx_lhs + 1
+        return idx_lhs, idx_rhs
+
     def train_node(self, level, idx, img_data, param, radius, indices, \
         landmark_residual, landmark_approx):
 
@@ -222,11 +235,7 @@ class TreeClassifier:
 
         self.node_data[idx] = split_data
 
-        nodes_level_left = idx - (pow(2, level) - 1)
-        nodes_level_right = (pow(2, level + 1) - 2) - idx
-
-        idx_lhs = idx + nodes_level_right + 2 * nodes_level_left + 1
-        idx_rhs = idx_lhs + 1
+        idx_lhs, idx_rhs = self.get_child_idx(level, idx)
 
         # Early exit if the full depth of the tree was learned.
         if (level + 1 == self.depth):
@@ -237,12 +246,11 @@ class TreeClassifier:
             # Set the binary features for the lhs and rhs indices.
             self.train_data_leafs[lhs_indices, offset_lhs] = 1
             self.train_data_leafs[rhs_indices, offset_rhs] = 1
-            return
-
-        self.train_node(level + 1, idx_lhs, img_data, param, radius, lhs_indices,
-            landmark_residual, landmark_approx)
-        self.train_node(level + 1, idx_rhs, img_data, param, radius, rhs_indices,
-            landmark_residual, landmark_approx)
+        else:
+            self.train_node(level + 1, idx_lhs, img_data, param, radius,
+                lhs_indices, landmark_residual, landmark_approx)
+            self.train_node(level + 1, idx_rhs, img_data, param, radius,
+                rhs_indices, landmark_residual, landmark_approx)
 
     def fit(self, img_data, param, radius, landmark, landmark_approx):
         assert_single_landmark(landmark)
@@ -312,13 +320,14 @@ if __name__ == '__main__':
     log('Loading image data')
     img_data = read_images(img_ids, sys.argv[2])
 
-    log('Compute single split node')
-
-
     # Example training for the first landmark over all images:
-    radius = 10.0
 
-    for iter in range(5):
+    MAX_ITER = 5
+    for iter in range(MAX_ITER):
+        radius = 20.0 - 1.5 * iter
+
+        log('Construct RandomForestClassifier (iter=%d/%d, radius=%.3f)' % (iter + 1, MAX_ITER, radius))
+
         res = []
         for mark_idx in range(landmarks.shape[1]):
         # for mark_idx in range(2):
@@ -331,6 +340,8 @@ if __name__ == '__main__':
         # Get the concatinated global feature mapping PHI over all the single
         # landmarks local binary features
         global_feature_mapping = np.hstack(res)
+
+        log('Compute global regression matrix')
 
         landmarks_residual = (landmarks - landmarks_approx).reshape(-1, 40)
 
