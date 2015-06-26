@@ -135,10 +135,9 @@ def var_red_xy(arr_xy):
     # return np.sqrt(var_red(arr_xy[:,0]) ** 2 + var_red(arr_xy[:,1]) ** 2)
     return var_red(arr_xy[:,0]) + var_red(arr_xy[:,1])
 
-def compute_split_node(img_data, indices, full_landmark_residual, full_approx_landmark,
-        radius, num_sample, img_width, img_height):
+def compute_split_node(min_split, img_data, indices, full_landmark_residual,
+        full_approx_landmark, radius, num_sample, img_width, img_height):
     """Comptues a split node using random sampling.
-
     """
 
     # Create a copy of the landmark data that is indiced by this function call.
@@ -182,15 +181,20 @@ def compute_split_node(img_data, indices, full_landmark_residual, full_approx_la
         # in the center to avoid very small splits.
         # threshold = np.random.choice(pixel_diffs[i])
 
-        sorted_pixel_diffs = np.sort(pixel_diffs[i])
-        ind = np.floor(len(sorted_pixel_diffs) * (0.5 + 0.7*(np.random.rand() - 0.5)))
-        # print ind, len(sorted_pixel_diffs)
+        for j in range(5):
+            sorted_pixel_diffs = np.sort(pixel_diffs[i])
+            ind = np.floor(len(sorted_pixel_diffs) * (0.5 + 0.7*(np.random.rand() - 0.5)))
 
-        threshold = sorted_pixel_diffs[ind]
+            threshold = sorted_pixel_diffs[ind]
 
+            lhs_indices = np.where(pixel_diffs[i] < threshold)[0]
+            rhs_indices = np.where(pixel_diffs[i] >= threshold)[0]
 
-        lhs_indices = np.where(pixel_diffs[i] < threshold)[0]
-        rhs_indices = np.where(pixel_diffs[i] >= threshold)[0]
+            if (len(lhs_indices) >= min_split and len(rhs_indices) >= min_split):
+                break;
+
+        if (len(lhs_indices) <= min_split or len(rhs_indices) <= min_split):
+            continue
 
         var_reduce = var_red_total - \
             var_red_xy(landmark_residual[lhs_indices]) - \
@@ -202,6 +206,8 @@ def compute_split_node(img_data, indices, full_landmark_residual, full_approx_la
             best_result = (i, threshold, lhs_indices, rhs_indices)
 
     assert best_result != None, "A best choice for the threshold was not found."
+
+    assert len(lhs_indices) >= min_split and len(rhs_indices) >= min_split, "Achieved a split with minimum number of nodes."
 
     # Convert the local indices to global-all-images indices back again.
     best_offsets = offsets[best_result[0]]
@@ -236,8 +242,11 @@ class TreeClassifier:
             print ''
             print '=== Train node: level=%d idx=%d' % (level, idx)
 
+        # The number of minimal elements splitted to the right and to the left.
+        min_split = pow(2, self.depth - level - 1)
+
         split_data, lhs_indices, rhs_indices = compute_split_node( \
-            img_data, indices, landmark_residual, landmark_approx, \
+            min_split, img_data, indices, landmark_residual, landmark_approx, \
             radius, param['num_sample'], param['img_width'], param['img_height'])
 
         if self.debug:
@@ -246,6 +255,8 @@ class TreeClassifier:
         self.node_data[idx] = split_data
 
         idx_lhs, idx_rhs = self.get_child_idx(level, idx)
+
+        print 'train_node level=%d is done' % level
 
         # Early exit if the full depth of the tree was learned.
         if (level + 1 == self.depth):
@@ -321,7 +332,7 @@ def plot_data(img_index, img_data, landmarks, landmark_approx, name):
 def train_random_forest(mark_idx):
     print 'Train landmark %d/%d' % (mark_idx, landmarks.shape[1])
 
-    # NOTE: depth = number of split nodes -> the leafs are on 'depth + 1' level!
+    # NOTE: depth = number of split nodes -> the leafs are on 'depth' level!
     rf = RandomForestClassifier(depth=3, n_tree=5)
     return rf.fit(img_data, param, radius, landmarks[:, mark_idx], landmarks_approx[:,mark_idx])
 
@@ -363,7 +374,8 @@ if __name__ == '__main__':
         #       to the forked child processes.
         pool = Pool(processes=7)
 
-        res = pool.map(train_random_forest, range(landmarks.shape[1]))
+        # HACK: Work using 'map_async' to work around ctrl+c not terminating [1]
+        res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
         # res = []
         # for mark_idx in range(landmarks.shape[1]):
         #     res.append(train_random_forest(mark_idx))
@@ -415,3 +427,5 @@ if __name__ == '__main__':
 # Commands to show an image
 # plt.imshow(rd)
 # plt.show()
+
+# [1]: http://stackoverflow.com/q/1408356
