@@ -5,6 +5,7 @@ import numpy as np
 import sys
 
 import matplotlib.pyplot as plt
+from multiprocessing import Pool
 
 from liblinear.liblinearutil import train as liblinear_train
 from liblinear.liblinear import problem as liblinear_problem
@@ -317,6 +318,13 @@ def plot_data(img_index, img_data, landmarks, landmark_approx, name):
 
     plt.savefig('train_round_' + name + '.png')
 
+def train_random_forest(mark_idx):
+    print 'Train landmark %d/%d' % (mark_idx, landmarks.shape[1])
+
+    # NOTE: depth = number of split nodes -> the leafs are on 'depth + 1' level!
+    rf = RandomForestClassifier(depth=3, n_tree=5)
+    return rf.fit(img_data, param, radius, landmarks[:, mark_idx], landmarks_approx[:,mark_idx])
+
 def print_usage():
     usage = """
 Usage:
@@ -350,14 +358,16 @@ if __name__ == '__main__':
 
         log('Construct RandomForestClassifier (iter=%d/%d, radius=%.3f)' % (iter + 1, MAX_ITER, radius))
 
-        res = []
-        for mark_idx in range(landmarks.shape[1]):
-        # for mark_idx in range(2):
-            print 'Train landmark %d/%d' % (mark_idx, landmarks.shape[1])
+        # NOTE: Creating the pool object here, such that ALL the local and
+        #       global variables *BEFORE* this invocation are also available
+        #       to the forked child processes.
+        pool = Pool(processes=7)
 
-            # NOTE: depth = number of split nodes -> the leafs are on 'depth + 1' level!
-            rf = RandomForestClassifier(depth=3, n_tree=5)
-            res.append(rf.fit(img_data, param, radius, landmarks[:, mark_idx], landmarks_approx[:,mark_idx]))
+        res = pool.map(train_random_forest, range(landmarks.shape[1]))
+        # res = []
+        # for mark_idx in range(landmarks.shape[1]):
+        #     res.append(train_random_forest(mark_idx))
+        #
 
         # Get the concatinated global feature mapping PHI over all the single
         # landmarks local binary features
