@@ -4,6 +4,8 @@ from scipy import misc
 import numpy as np
 import sys
 
+import matplotlib.pyplot as plt
+
 from liblinear.liblinearutil import train as liblinear_train
 from liblinear.liblinear import problem as liblinear_problem
 from liblinear.liblinear import parameter as liblinear_parameter
@@ -52,6 +54,13 @@ def read_landmark_csv(file_path):
     approx_landmarks = np.tile(mean_flat, train_size).reshape(-1, 20, 2)
 
     return img_ids, landmarks, approx_landmarks
+
+def read_images_raw(img_ids, img_root_path):
+    def read_image(img_id):
+        # Read the image data.
+        return misc.imread(join(img_root_path, 'BioID_%04d.pgm' % (img_id)))
+
+    return map(read_image, img_ids)
 
 def read_images(img_ids, img_root_path):
     def read_image(img_id):
@@ -298,6 +307,15 @@ class RandomForestClassifier:
         pass
 
 
+def plot_data(img_index, img_data, landmarks, landmark_approx, name):
+    fig, axes = plt.subplots(1, len(img_index), sharey=True)
+
+    for idx, ax in enumerate(axes):
+        ax.imshow(img_data[idx], cmap=plt.get_cmap('gray'))
+        ax.plot(landmarks[idx,:,0], landmarks[idx,:,1], 'x')
+        ax.plot(landmark_approx[idx,:,0], landmark_approx[idx,:,1], 'o')
+
+    plt.savefig('train_round_' + name + '.png')
 
 def print_usage():
     usage = """
@@ -319,6 +337,10 @@ if __name__ == '__main__':
 
     log('Loading image data')
     img_data = read_images(img_ids, sys.argv[2])
+    img_data_raw = read_images_raw(img_ids, sys.argv[2])
+
+    IMG_DEBUG_INDEX = [1, 2]
+    plot_data(IMG_DEBUG_INDEX, img_data_raw, landmarks, landmarks_approx, 'start')
 
     # Example training for the first landmark over all images:
 
@@ -373,6 +395,9 @@ if __name__ == '__main__':
 
         # Update the landmark approximations
         landmarks_approx = landmarks_approx + landmarks_shifts
+
+        # Create image log
+        plot_data(IMG_DEBUG_INDEX, img_data_raw, landmarks, landmarks_approx, str(iter))
 
     log_finish()
 
