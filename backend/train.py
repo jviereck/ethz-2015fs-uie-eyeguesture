@@ -18,11 +18,11 @@ param = {
     'num_sample': 500
 }
 
-_last_log = None
-_last_task = None
-
 def flatten_list(aList):
     return [y for x in aList for y in x]
+
+_last_log = None
+_last_task = None
 
 def log_finish():
     if _last_log != None:
@@ -40,7 +40,7 @@ def log(task_name):
 
 def read_landmark_csv(file_path):
     data = np.genfromtxt(file_path, delimiter=',', skip_header=1)
-    img_ids = data[:,1]
+    img_ids = data[:,0]
     train_size = len(img_ids) # Number of images we use for training.
 
     # Get the landmarks and reshape to a N * 20-landmarks * (x, y) dimensional array
