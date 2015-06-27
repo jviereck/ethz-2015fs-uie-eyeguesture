@@ -4,6 +4,8 @@ from scipy import misc
 import numpy as np
 import sys
 
+import unittest
+
 import matplotlib.pyplot as plt
 from multiprocessing import Pool
 
@@ -135,10 +137,83 @@ def var_red_xy(arr_xy):
     # return np.sqrt(var_red(arr_xy[:,0]) ** 2 + var_red(arr_xy[:,1]) ** 2)
     return var_red(arr_xy[:,0]) + var_red(arr_xy[:,1])
 
+def get_last_index(lst, elm):
+    return (len(lst) - 1) - lst[::-1].index(elm)
+
+def split_by_threshold(pixel_diffs, min_split):
+    sorted_pixel_diffs = np.sort(pixel_diffs).tolist()
+
+    # Find the 'threshold' value for splitting the lower values, such that
+    # 'len(lhs) >= min_split'. Due to redundency in the pixel values getting
+    # just the index at 'sorted_pixel_diffs[min_split]' is not good enough
+    # as a 'threshold' value!
+
+    # A trivial implementation would go ahead and yield as 'threshold_low_idx'
+    # the index '0' BUT that is not correct due to the redundency!
+    # 'sorted_pixel_diffs = [0, 0, 1, 2, 3], min_split = 1'
+    # -> 'threshold_low_idx = 1'
+    threshold_low_idx = 0
+    while True:
+        # Look for the last index that suites the current 'threshold_low_idx'.
+        threshold_low_idx = get_last_index(sorted_pixel_diffs, sorted_pixel_diffs[threshold_low_idx])
+        # Check if there are more values found than required by 'min_split'.
+        if (threshold_low_idx + 1) >= min_split:  break;
+        # IF not enough values, then look at the next 'threshold' value
+        threshold_low_idx += 1
+
+
+    # Similar to the above for 'threshold_low_idx' but for the high-index-value.
+    threshold_hih_idx = len(sorted_pixel_diffs) - 1
+    while True:
+        threshold_hih_idx = sorted_pixel_diffs.index(sorted_pixel_diffs[threshold_hih_idx])
+        # NOTE: Do a '- 1' in the following as the 'rhs_indices' are computed
+        #       with 'pixel_diffs > threshold'.
+        if (len(sorted_pixel_diffs) - threshold_hih_idx - 1) >= min_split:  break;
+        # IF not enough values, then look at the next 'threshold' value
+        threshold_hih_idx -= 1
+
+
+    # Check the computed 'threshold_low_idx' and 'threshold_hih_idx'.
+    # There EXISTS a valid threshold value IF the low and high indices do not overlap.
+    if threshold_hih_idx < threshold_low_idx: return None, None, None
+
+    # === COMPUTE THE NEW threshold
+    # EXAMPLE:
+    #          l        h        << threshold_{[l]ow,[h]ih}_idx markers
+    #          |        |
+    #    0  1  2  3  4  5  6     << INDICES
+    #          |        |
+    #   [0, 0, 0, 1, 2, 3, 3]    << sorted_pixel_diffs
+    #          |        |
+    #          0  1  2  3
+
+    span = threshold_hih_idx - threshold_low_idx  # EXAMPLE_VAL=3
+    threshold_idx = threshold_low_idx + np.round(span * np.random.rand())
+
+    threshold = sorted_pixel_diffs[int(threshold_idx)]
+    lhs_indices = np.where(pixel_diffs <= threshold)[0]
+    rhs_indices = np.where(pixel_diffs > threshold)[0]
+
+    if len(lhs_indices) < min_split or len(rhs_indices) < min_split:
+        print '=== compute_split_node -> ERROR'
+        print 'threshold_low_idx=%d threshold_hih_idx=%d -> low_val=%d, hih_val=%d' % (
+            threshold_low_idx, threshold_hih_idx, sorted_pixel_diffs[threshold_low_idx], sorted_pixel_diffs[threshold_hih_idx])
+        print 'ind=%d of len(sorted_pixel_diffs)=%d, min_split=%d, threshold=%d' % (
+            threshold_idx, len(sorted_pixel_diffs), min_split, threshold)
+        print 'len(lhs)=%d len(rhs)=%d' % (len(lhs_indices), len(rhs_indices))
+        print sorted_pixel_diffs
+        assert False, "Got less splits than there should be!"
+
+    return threshold, lhs_indices, rhs_indices
+
+
+
 def compute_split_node(min_split, img_data, indices, full_landmark_residual,
         full_approx_landmark, radius, num_sample, img_width, img_height):
     """Comptues a split node using random sampling.
     """
+
+    assert len(indices) >= 2 * min_split
 
     # Create a copy of the landmark data that is indiced by this function call.
     landmark_residual = full_landmark_residual[indices]
@@ -177,24 +252,12 @@ def compute_split_node(min_split, img_data, indices, full_landmark_residual,
     best_result = None
 
     for i in range(num_sample):
-        # Pick the threshold randomly from the pixel values. Pick more points
-        # in the center to avoid very small splits.
-        # threshold = np.random.choice(pixel_diffs[i])
 
-        for j in range(5):
-            sorted_pixel_diffs = np.sort(pixel_diffs[i])
-            ind = np.floor(len(sorted_pixel_diffs) * (0.5 + 0.7*(np.random.rand() - 0.5)))
+        threshold, lhs_indices, rhs_indices = split_by_threshold(pixel_diffs[i], min_split)
 
-            threshold = sorted_pixel_diffs[ind]
-
-            lhs_indices = np.where(pixel_diffs[i] < threshold)[0]
-            rhs_indices = np.where(pixel_diffs[i] >= threshold)[0]
-
-            if (len(lhs_indices) >= min_split and len(rhs_indices) >= min_split):
-                break;
-
-        if (len(lhs_indices) <= min_split or len(rhs_indices) <= min_split):
-            continue
+        # IN CASE no 'threshold' satisfing the 'min_split' requirement was
+        #         able to be computed -> exit.
+        if threshold is None: continue
 
         var_reduce = var_red_total - \
             var_red_xy(landmark_residual[lhs_indices]) - \
@@ -202,12 +265,10 @@ def compute_split_node(min_split, img_data, indices, full_landmark_residual,
 
         if var_reduce > var_reduce_best or best_result == None:
             var_reduce_best = var_reduce
-
             best_result = (i, threshold, lhs_indices, rhs_indices)
 
     assert best_result != None, "A best choice for the threshold was not found."
-
-    assert len(lhs_indices) >= min_split and len(rhs_indices) >= min_split, "Achieved a split with minimum number of nodes."
+    assert len(best_result[2]) >= min_split and len(best_result[3]) >= min_split, "Achieved a split with minimum number of nodes."
 
     # Convert the local indices to global-all-images indices back again.
     best_offsets = offsets[best_result[0]]
@@ -255,8 +316,6 @@ class TreeClassifier:
         self.node_data[idx] = split_data
 
         idx_lhs, idx_rhs = self.get_child_idx(level, idx)
-
-        print 'train_node level=%d is done' % level
 
         # Early exit if the full depth of the tree was learned.
         if (level + 1 == self.depth):
@@ -375,11 +434,11 @@ if __name__ == '__main__':
         pool = Pool(processes=7)
 
         # HACK: Work using 'map_async' to work around ctrl+c not terminating [1]
-        res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
-        # res = []
-        # for mark_idx in range(landmarks.shape[1]):
-        #     res.append(train_random_forest(mark_idx))
-        #
+        # res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
+        res = []
+        for mark_idx in range(landmarks.shape[1]):
+            res.append(train_random_forest(mark_idx))
+
 
         # Get the concatinated global feature mapping PHI over all the single
         # landmarks local binary features
