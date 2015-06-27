@@ -140,7 +140,34 @@ def var_red_xy(arr_xy):
 def get_last_index(lst, elm):
     return (len(lst) - 1) - lst[::-1].index(elm)
 
-def split_by_threshold(pixel_diffs, min_split):
+# A set of very simple unit tests for the 'split_by_threshold' function.
+class SplitByThresholdTest(unittest.TestCase):
+    def testZero(self):
+        pixel_diffs = np.array([-193, -171, -128, -125, -123, -122, -119, -118,
+            -117, -116, -114, -103, -102, -101, -100, -99, -98, -95, -87, -86,
+            -85, -82, -71, -69, -55, -55, -52, -51, -51, -50, -50, -46, -45, -44,
+            -41, -41, -39, -38, -37, -33, -31, -30, -20, -14, -11, -10, -10, -6,
+            -4, -2, 0, 5, 8, 11, 13, 25, 27, 28, 29, 30, 32, 33, 42, 43, 43, 43,
+            46, 46, 50, 51, 51, 52, 54, 57, 61, 61, 68, 69, 71, 72, 73, 74, 81,
+            86, 87, 88, 90, 91, 116])
+
+        split_by_threshold(pixel_diffs, 4, 0.0)
+        split_by_threshold(pixel_diffs, 4, 1.0)
+
+
+    def testOne(self):
+        pixel_diffs = np.array([-108, -103, -91, -51, -39, -39, -38, -36, -31,
+            -28, -27, -26, -24, -24, -23, -22, -21, -21, -20, -19, -18, -9, -6,
+            -5, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6,
+            6, 6, 7, 7, 12, 20, 22, 36, 37, 63, 63, 87, 89, 89, 90, 91, 92, 95,
+            97, 97, 98, 100, 100, 111, 123, 129, 129, 131, 131, 132, 133, 133,
+            134, 136, 179, 180, 181, 182, 184, 184, 184, 193, 197])
+
+        split_by_threshold(pixel_diffs, 4, 0.0)
+        split_by_threshold(pixel_diffs, 4, 1.0)
+
+
+def split_by_threshold(pixel_diffs, min_split, rand_val):
     sorted_pixel_diffs = np.sort(pixel_diffs).tolist()
 
     # Find the 'threshold' value for splitting the lower values, such that
@@ -168,9 +195,10 @@ def split_by_threshold(pixel_diffs, min_split):
         threshold_hih_idx = sorted_pixel_diffs.index(sorted_pixel_diffs[threshold_hih_idx])
         # NOTE: Do a '- 1' in the following as the 'rhs_indices' are computed
         #       with 'pixel_diffs > threshold'.
-        if (len(sorted_pixel_diffs) - threshold_hih_idx - 1) >= min_split:  break;
+        if (len(sorted_pixel_diffs) - threshold_hih_idx) >= min_split:  break;
         # IF not enough values, then look at the next 'threshold' value
         threshold_hih_idx -= 1
+
 
 
     # Check the computed 'threshold_low_idx' and 'threshold_hih_idx'.
@@ -186,9 +214,16 @@ def split_by_threshold(pixel_diffs, min_split):
     #   [0, 0, 0, 1, 2, 3, 3]    << sorted_pixel_diffs
     #          |        |
     #          0  1  2  3
-
-    span = threshold_hih_idx - threshold_low_idx  # EXAMPLE_VAL=3
-    threshold_idx = threshold_low_idx + np.round(span * np.random.rand())
+    #          |<--->|           << SPAN
+    #
+    # NOTE: The 'threshold' value splits the values in
+    #
+    #         'lhs = val <= threshold'
+    #         'rhs = val >  threshold'
+    #
+    #       Therefore, the span should be '- 1' of the distance 'high - low'
+    span = threshold_hih_idx - threshold_low_idx - 1 # EXAMPLE_VAL=3
+    threshold_idx = threshold_low_idx + np.round(span * rand_val)
 
     threshold = sorted_pixel_diffs[int(threshold_idx)]
     lhs_indices = np.where(pixel_diffs <= threshold)[0]
@@ -252,8 +287,8 @@ def compute_split_node(min_split, img_data, indices, full_landmark_residual,
     best_result = None
 
     for i in range(num_sample):
-
-        threshold, lhs_indices, rhs_indices = split_by_threshold(pixel_diffs[i], min_split)
+        threshold, lhs_indices, rhs_indices = \
+            split_by_threshold(pixel_diffs[i], min_split, np.random.rand())
 
         # IN CASE no 'threshold' satisfing the 'min_split' requirement was
         #         able to be computed -> exit.
@@ -389,7 +424,7 @@ def plot_data(img_index, img_data, landmarks, landmark_approx, name):
     plt.savefig('train_round_' + name + '.png')
 
 def train_random_forest(mark_idx):
-    print 'Train landmark %d/%d' % (mark_idx, landmarks.shape[1])
+    print 'Train landmark %d/%d' % (mark_idx + 1, landmarks.shape[1])
 
     # NOTE: depth = number of split nodes -> the leafs are on 'depth' level!
     rf = RandomForestClassifier(depth=3, n_tree=5)
@@ -403,8 +438,13 @@ Usage:
     print(usage)
 
 if __name__ == '__main__':
-    if (len(sys.argv) == 2):
+    if (len(sys.argv) <= 2):
         print_usage()
+        print ''
+
+        print '(Running unit tests...)'
+        unittest.main()
+
         sys.exit(1)
 
     # Fix the random seed to get reproducable results.
@@ -434,10 +474,10 @@ if __name__ == '__main__':
         pool = Pool(processes=7)
 
         # HACK: Work using 'map_async' to work around ctrl+c not terminating [1]
-        # res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
-        res = []
-        for mark_idx in range(landmarks.shape[1]):
-            res.append(train_random_forest(mark_idx))
+        res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
+        # res = []
+        # for mark_idx in range(landmarks.shape[1]):
+        #     res.append(train_random_forest(mark_idx))
 
 
         # Get the concatinated global feature mapping PHI over all the single
