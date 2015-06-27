@@ -414,14 +414,22 @@ class RandomForestClassifier:
 
 
 def plot_data(img_index, img_data, landmarks, landmark_approx, name):
-    fig, axes = plt.subplots(1, len(img_index), sharey=True)
+    DPI = 80
+    img_width, img_height = float(param['img_width']), float(param['img_height'])
+    fig_size = (img_width / DPI * len(img_index), img_height / DPI)
+    # fig_size = (len(img_index) * , )
+    fig, axes = plt.subplots(1, len(img_index), sharey=True, figsize=fig_size) # , figsize=fig_size
+    fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
 
     for idx, ax in enumerate(axes):
-        ax.imshow(img_data[idx], cmap=plt.get_cmap('gray'))
-        ax.plot(landmarks[idx,:,0], landmarks[idx,:,1], 'x')
-        ax.plot(landmark_approx[idx,:,0], landmark_approx[idx,:,1], 'o')
+        img_idx = img_index[idx]
+        ax.axis([0, img_width, img_height, 0])
+        ax.set_aspect('equal')
+        ax.imshow(img_data[img_idx], cmap=plt.get_cmap('gray'))
+        ax.plot(landmarks[img_idx,:,0], landmarks[img_idx,:,1], 'x')
+        ax.plot(landmark_approx[img_idx,:,0], landmark_approx[img_idx,:,1], 'o')
 
-    plt.savefig('train_round_' + name + '.png')
+    plt.savefig('train_round_%02d.png' % int(name), dpi=80)
 
 def train_random_forest(mark_idx):
     print 'Train landmark %d/%d' % (mark_idx + 1, landmarks.shape[1])
@@ -457,12 +465,12 @@ if __name__ == '__main__':
     img_data = read_images(img_ids, sys.argv[2])
     img_data_raw = read_images_raw(img_ids, sys.argv[2])
 
-    IMG_DEBUG_INDEX = [1, 2]
-    plot_data(IMG_DEBUG_INDEX, img_data_raw, landmarks, landmarks_approx, 'start')
+    IMG_DEBUG_INDEX = [np.where(img_ids == i)[0][0] for i in [11, 58, 76, 1092, 1491]]
+    plot_data(IMG_DEBUG_INDEX, img_data_raw, landmarks, landmarks_approx, '0')
 
     # Example training for the first landmark over all images:
 
-    MAX_ITER = 5
+    MAX_ITER = 10
     for iter in range(MAX_ITER):
         radius = 20.0 - 1.5 * iter
 
@@ -518,7 +526,7 @@ if __name__ == '__main__':
         landmarks_approx = landmarks_approx + landmarks_shifts
 
         # Create image log
-        plot_data(IMG_DEBUG_INDEX, img_data_raw, landmarks, landmarks_approx, str(iter))
+        plot_data(IMG_DEBUG_INDEX, img_data_raw, landmarks, landmarks_approx, str(iter + 1))
 
     log_finish()
 
