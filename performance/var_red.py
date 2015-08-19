@@ -1,33 +1,12 @@
 import numpy as np
 
-# AS TAKEN from backend/train.py
-def var_red(arr):
-    # print arr
-    # Computes a single term in the formular at
-    # http://en.wikipedia.org/wiki/Decision_tree_learning#Variance_reduction
+# NOTE: See the StackOverflow example on how to get started with ctypes
+#    in python! -> http://stackoverflow.com/a/5082294
+import ctypes
+var_red_lib = ctypes.CDLL('var_red.so')
 
-    # import pdb
-    # pdb.set_trace()
-    N = float(len(arr))
 
-    if N == 0.0:
-        return 0.0
-
-    n = np.tile(arr, N).reshape(-1, N)
-    return 0.5 * (1.0/N) * np.sum((n - n.T)**2)
-
-if __name__ == '__main__':
-
-  #  ➜  performance git:(master) ✗ time python var_red.py
-  #  1094714187.49
-  #  python var_red.py  2.61s user 0.04s system 99% cpu 2.657 total
-  #  ➜  performance git:(master) ✗ time python var_red.py
-  #  1094714187.49
-  #  python var_red.py  2.28s user 0.04s system 99% cpu 2.329 total
-  #  ➜  performance git:(master) ✗ time python var_red.py
-  #  1094714187.49
-  #  python var_red.py  2.67s user 0.05s system 99% cpu 2.732 total
-
+def run_test(var_red_fn):
   a = [-10.4638427, -20.4298427, -13.7448427,  17.5441573,   1.0081573,  -4.8018427
     -6.5888427,  33.6321573, -13.2928427, -14.6338427]
 
@@ -91,14 +70,53 @@ if __name__ == '__main__':
   NUM_RUNS = 9999
   res = 0.0
   for k in range(NUM_RUNS):
-    res += var_red(a);
-    res += var_red(b);
-    res += var_red(c);
-    res += var_red(d);
-    res += var_red(e);
-    res += var_red(f);
-    res += var_red(g);
-    res += var_red(h);
-    res += var_red(i);
+    res += var_red_fn(a);
+    res += var_red_fn(b);
+    res += var_red_fn(c);
+    res += var_red_fn(d);
+    res += var_red_fn(e);
+    res += var_red_fn(f);
+    res += var_red_fn(g);
+    res += var_red_fn(h);
+    res += var_red_fn(i);
 
   print res
+
+
+# AS TAKEN from backend/train.py
+def var_red_python(arr):
+    # print arr
+    # Computes a single term in the formular at
+    # http://en.wikipedia.org/wiki/Decision_tree_learning#Variance_reduction
+
+    # import pdb
+    # pdb.set_trace()
+    N = float(len(arr))
+
+    if N == 0.0:
+        return 0.0
+
+    n = np.tile(arr, N).reshape(-1, N)
+    return 0.5 * (1.0/N) * np.sum((n - n.T)**2)
+
+
+def var_red_c(arr):
+  var_red_lib.myprint()
+  return 0.0
+
+if __name__ == '__main__':
+
+
+  #  ->  performance git:(master) x time python var_red.py
+  #  1094714187.49
+  #  python var_red.py  2.61s user 0.04s system 99% cpu 2.657 total
+  #  ->  performance git:(master) x time python var_red.py
+  #  1094714187.49
+  #  python var_red.py  2.28s user 0.04s system 99% cpu 2.329 total
+  #  ->  performance git:(master) x time python var_red.py
+  #  1094714187.49
+  #  python var_red.py  2.67s user 0.05s system 99% cpu 2.732 total
+
+  # run_test(var_red_python)
+
+  run_test(var_red_c)
