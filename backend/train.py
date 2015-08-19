@@ -146,8 +146,8 @@ def var_red(arr):
     return var_red_lib_fn(ctypes.c_int(len(arr)), ctypes.c_void_p(arr.ctypes.data))
 
 def var_red_xy(arr_xy):
-    return np.sqrt(var_red(arr_xy[:,0]) ** 2 + var_red(arr_xy[:,1]) ** 2)
-    # return var_red(arr_xy[:,0]) + var_red(arr_xy[:,1])
+    # return np.sqrt(var_red(arr_xy[:,0]) ** 2 + var_red(arr_xy[:,1]) ** 2)
+    return var_red(arr_xy[:,0]) + var_red(arr_xy[:,1])
 
 def get_last_index(lst, elm):
     return (len(lst) - 1) - lst[::-1].index(elm)
@@ -408,8 +408,6 @@ class TreeClassifier:
         self.train_node(0, 0, img_data, param, radius, indices, \
             landmark_residual, landmark_approx)
 
-        import pdb; pdb.set_trace()
-
         return self.train_data_leafs
 
 class RandomForestClassifier:
@@ -505,12 +503,12 @@ if __name__ == '__main__':
         #       global variables *BEFORE* this invocation are also available
         #       to the forked child processes.
         # HACK: Work using 'map_async' to work around ctrl+c not terminating [1]
-        # pool = Pool(processes=7)
-        # res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
+        pool = Pool(processes=7)
+        res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
 
-        res = []
-        for mark_idx in range(landmarks.shape[1]):
-            res.append(train_random_forest(mark_idx))
+        # res = []
+        # for mark_idx in range(landmarks.shape[1]):
+        #     res.append(train_random_forest(mark_idx))
 
 
         # Get the concatinated global feature mapping PHI over all the single
@@ -523,7 +521,7 @@ if __name__ == '__main__':
 
         # How to call into liblinear is mostly inspired by:
         # https://github.com/jwyang/face-alignment/blob/master/src/globalregression.m
-        cost = 1.0/global_feature_mapping.shape[1]
+        cost = 10.0/global_feature_mapping.shape[1]
         x_list = global_feature_mapping.tolist()
 
         # Note: Instead of solving the entire matrix system at once here, solving
