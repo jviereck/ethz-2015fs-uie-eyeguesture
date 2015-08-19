@@ -97,7 +97,7 @@ def var_red_python(arr):
         return 0.0
 
     n = np.tile(arr, N).reshape(-1, N)
-    return 0.5 * (1.0/N) * np.sum((n - n.T)**2)
+    return 0.5 * (1.0/(N**2)) * np.sum((n - n.T)**2)
 
 
 def var_red_c(arr):

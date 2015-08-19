@@ -44,7 +44,7 @@ def log(task_name):
 
 
 def read_landmark_csv(file_path):
-    data = np.genfromtxt(file_path, delimiter=',', skip_header=1)
+    data = np.genfromtxt(file_path, delimiter=',', skip_header=1, dtype='f32')
     img_ids = data[:,0]
     train_size = len(img_ids) # Number of images we use for training.
 
@@ -120,7 +120,6 @@ def compute_var(vector_2d):
     return np.sum(res) * len(vector_2d)
 
 def var_red(arr):
-    print arr
     # Computes a single term in the formular at
     # http://en.wikipedia.org/wiki/Decision_tree_learning#Variance_reduction
 
