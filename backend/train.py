@@ -120,6 +120,7 @@ def compute_var(vector_2d):
     return np.sum(res) * len(vector_2d)
 
 def var_red(arr):
+    print arr
     # Computes a single term in the formular at
     # http://en.wikipedia.org/wiki/Decision_tree_learning#Variance_reduction
 
@@ -134,8 +135,8 @@ def var_red(arr):
     return 0.5 * (1.0/N) * np.sum((n - n.T)**2)
 
 def var_red_xy(arr_xy):
-    # return np.sqrt(var_red(arr_xy[:,0]) ** 2 + var_red(arr_xy[:,1]) ** 2)
-    return var_red(arr_xy[:,0]) + var_red(arr_xy[:,1])
+    return np.sqrt(var_red(arr_xy[:,0]) ** 2 + var_red(arr_xy[:,1]) ** 2)
+    # return var_red(arr_xy[:,0]) + var_red(arr_xy[:,1])
 
 def get_last_index(lst, elm):
     return (len(lst) - 1) - lst[::-1].index(elm)
@@ -167,6 +168,7 @@ class SplitByThresholdTest(unittest.TestCase):
         split_by_threshold(pixel_diffs, 4, 1.0)
 
 
+# @profile
 def split_by_threshold(pixel_diffs, min_split, rand_val):
     sorted_pixel_diffs = np.sort(pixel_diffs).tolist()
 
@@ -242,7 +244,9 @@ def split_by_threshold(pixel_diffs, min_split, rand_val):
     return threshold, lhs_indices, rhs_indices
 
 
-
+# Using the 'line_profiler' package.
+# SEE: http://www.huyng.com/posts/python-performance-analysis/
+# @profile
 def compute_split_node(min_split, img_data, indices, full_landmark_residual,
         full_approx_landmark, radius, num_sample, img_width, img_height):
     """Comptues a split node using random sampling.

@@ -95,6 +95,29 @@ $ cd backend
 $ python train.py ../tools/landmarks_filtered.csv ../../bioid_data/BioID-FaceDatabase-V1.2
 ```
 
+## Running with line profiler enabled
+
+To get a quick overview about the performance of a function by lines, using the [`line_profiler`](http://www.huyng.com/posts/python-performance-analysis/)
+package turns out to be convenient.
+
+To use the profiler, annotate the functions to profile with an `@profile` annotation like
+
+```python
+@profile
+def split_by_threshold(pixel_diffs, min_split, rand_val):
+	...
+```
+
+and then start the program using:
+
+```bash
+$ kernprof -l -v train.py ../tools/landmarks_filtered.csv ../../bioid_data/BioID-FaceDatabase-V1.2
+```
+
+**NOTE:** Ensure the code runs in serial mode while profiling - aka.: disable the
+`pool.map_async` lines on the way.
+
+
 # TODOS
 
 - center the images before starting the training

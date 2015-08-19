@@ -1,0 +1,176 @@
+➜  backend git:(master) ✗ kernprof -l -v train.py ../tools/landmarks_filtered.csv ../../bioid_data/BioID-FaceDatabase-V1.2
+=== STARTING "Processing landmarks"
+(FINISHED "Processing landmarks" in 0.00 sec)
+
+=== STARTING "Loading image data"
+(FINISHED "Loading image data" in 1.64 sec)
+
+=== STARTING "Construct RandomForestClassifier (iter=1/10, radius=20.000)"
+Train landmark 1/20
+Train landmark 2/20
+Train landmark 3/20
+Train landmark 4/20
+Train landmark 5/20
+Train landmark 6/20
+Train landmark 7/20
+Train landmark 8/20
+Train landmark 9/20
+Train landmark 10/20
+Train landmark 11/20
+Train landmark 12/20
+Train landmark 13/20
+Train landmark 14/20
+
+KeyboardInterrupt
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   170                                           @profile
+   171                                           def split_by_threshold(pixel_diffs, min_split, rand_val):
+   172    235370      1763287      7.5     18.1      sorted_pixel_diffs = np.sort(pixel_diffs).tolist()
+   173
+   174                                               # Find the 'threshold' value for splitting the lower values, such that
+   175                                               # 'len(lhs) >= min_split'. Due to redundency in the pixel values getting
+   176                                               # just the index at 'sorted_pixel_diffs[min_split]' is not good enough
+   177                                               # as a 'threshold' value!
+   178
+   179                                               # A trivial implementation would go ahead and yield as 'threshold_low_idx'
+   180                                               # the index '0' BUT that is not correct due to the redundency!
+   181                                               # 'sorted_pixel_diffs = [0, 0, 1, 2, 3], min_split = 1'
+   182                                               # -> 'threshold_low_idx = 1'
+   183    235370       128970      0.5      1.3      threshold_low_idx = 0
+   184    392132       209418      0.5      2.2      while True:
+   185                                                   # Look for the last index that suites the current 'threshold_low_idx'.
+   186    392132      1092681      2.8     11.2          threshold_low_idx = get_last_index(sorted_pixel_diffs, sorted_pixel_diffs[threshold_low_idx])
+   187                                                   # Check if there are more values found than required by 'min_split'.
+   188    392132       239007      0.6      2.5          if (threshold_low_idx + 1) >= min_split:  break;
+   189                                                   # IF not enough values, then look at the next 'threshold' value
+   190    156762        83967      0.5      0.9          threshold_low_idx += 1
+   191
+   192
+   193                                               # Similar to the above for 'threshold_low_idx' but for the high-index-value.
+   194    235370       139178      0.6      1.4      threshold_hih_idx = len(sorted_pixel_diffs) - 1
+   195    392471       203209      0.5      2.1      while True:
+   196    392471       596483      1.5      6.1          threshold_hih_idx = sorted_pixel_diffs.index(sorted_pixel_diffs[threshold_hih_idx])
+   197                                                   # NOTE: Do a '- 1' in the following as the 'rhs_indices' are computed
+   198                                                   #       with 'pixel_diffs > threshold'.
+   199    392471       245239      0.6      2.5          if (len(sorted_pixel_diffs) - threshold_hih_idx) >= min_split:  break;
+   200                                                   # IF not enough values, then look at the next 'threshold' value
+   201    157101        85745      0.5      0.9          threshold_hih_idx -= 1
+   202
+   203
+   204
+   205                                               # Check the computed 'threshold_low_idx' and 'threshold_hih_idx'.
+   206                                               # There EXISTS a valid threshold value IF the low and high indices do not overlap.
+   207    235370       125334      0.5      1.3      if threshold_hih_idx < threshold_low_idx: return None, None, None
+   208
+   209                                               # === COMPUTE THE NEW threshold
+   210                                               # EXAMPLE:
+   211                                               #          l        h        << threshold_{[l]ow,[h]ih}_idx markers
+   212                                               #          |        |
+   213                                               #    0  1  2  3  4  5  6     << INDICES
+   214                                               #          |        |
+   215                                               #   [0, 0, 0, 1, 2, 3, 3]    << sorted_pixel_diffs
+   216                                               #          |        |
+   217                                               #          0  1  2  3
+   218                                               #          |<--->|           << SPAN
+   219                                               #
+   220                                               # NOTE: The 'threshold' value splits the values in
+   221                                               #
+   222                                               #         'lhs = val <= threshold'
+   223                                               #         'rhs = val >  threshold'
+   224                                               #
+   225                                               #       Therefore, the span should be '- 1' of the distance 'high - low'
+   226    235290       133981      0.6      1.4      span = threshold_hih_idx - threshold_low_idx - 1 # EXAMPLE_VAL=3
+   227    235290      2630581     11.2     27.1      threshold_idx = threshold_low_idx + np.round(span * rand_val)
+   228
+   229    235290       233856      1.0      2.4      threshold = sorted_pixel_diffs[int(threshold_idx)]
+   230    235290       959808      4.1      9.9      lhs_indices = np.where(pixel_diffs <= threshold)[0]
+   231    235290       520623      2.2      5.4      rhs_indices = np.where(pixel_diffs > threshold)[0]
+   232
+   233    235290       192632      0.8      2.0      if len(lhs_indices) < min_split or len(rhs_indices) < min_split:
+   234                                                   print '=== compute_split_node -> ERROR'
+   235                                                   print 'threshold_low_idx=%d threshold_hih_idx=%d -> low_val=%d, hih_val=%d' % (
+   236                                                       threshold_low_idx, threshold_hih_idx, sorted_pixel_diffs[threshold_low_idx], sorted_pixel_diffs[threshold_hih_idx])
+   237                                                   print 'ind=%d of len(sorted_pixel_diffs)=%d, min_split=%d, threshold=%d' % (
+   238                                                       threshold_idx, len(sorted_pixel_diffs), min_split, threshold)
+   239                                                   print 'len(lhs)=%d len(rhs)=%d' % (len(lhs_indices), len(rhs_indices))
+   240                                                   print sorted_pixel_diffs
+   241                                                   assert False, "Got less splits than there should be!"
+   242
+   243    235290       135808      0.6      1.4      return threshold, lhs_indices, rhs_indices
+
+Total time: 59.6056 s
+File: train.py
+Function: compute_split_node at line 248
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   248                                           @profile
+   249                                           def compute_split_node(min_split, img_data, indices, full_landmark_residual,
+   250                                                   full_approx_landmark, radius, num_sample, img_width, img_height):
+   251                                               """Comptues a split node using random sampling.
+   252                                               """
+   253
+   254       471          554      1.2      0.0      assert len(indices) >= 2 * min_split
+   255
+   256                                               # Create a copy of the landmark data that is indiced by this function call.
+   257       471         2436      5.2      0.0      landmark_residual = full_landmark_residual[indices]
+   258       471         1916      4.1      0.0      approx_landmark = full_approx_landmark[indices]
+   259
+   260       471          679      1.4      0.0      assert indices.__class__ == np.ndarray, "Expect indices to be an np.array."
+   261
+   262                                               # Part 1: Compute random offsets and gather the pixel differences from the
+   263                                               #   image data based on the offsets.
+   264
+   265       471          335      0.7      0.0      offsets = []
+   266       471          280      0.6      0.0      pixel_diffs = []
+   267
+   268    235971       155178      0.7      0.3      for i in range(num_sample):
+   269    235500       143774      0.6      0.2          pixel_values_a, offset_a = get_random_offset_pixel_values(
+   270    235500      6228817     26.4     10.5              img_data, indices, approx_landmark, radius, img_width, img_height)
+   271
+   272    235500       161303      0.7      0.3          pixel_values_b, offset_b = get_random_offset_pixel_values(
+   273    235500      6125537     26.0     10.3              img_data, indices, approx_landmark, radius, img_width, img_height)
+   274
+   275    235500       300061      1.3      0.5          pixel_diff = pixel_values_a - pixel_values_b
+   276
+   277    235500       197383      0.8      0.3          offsets.append((offset_a, offset_b))
+   278    235500       177027      0.8      0.3          pixel_diffs.append(pixel_diff)
+   279
+   280
+   281                                               # Part 2: Look for the offset / trashold combination, that yields the best
+   282                                               #   variance reduction.
+   283
+   284                                               # To compute the variance reductinon, see the forumular here:
+   285                                               # http://en.wikipedia.org/wiki/Decision_tree_learning#Variance_reduction
+   286
+   287       471        62405    132.5      0.1      var_red_total = var_red_xy(landmark_residual)
+   288
+   289       471          402      0.9      0.0      var_reduce_best = 0
+   290       471          306      0.6      0.0      best_result = None
+   291
+   292    235840       171779      0.7      0.3      for i in range(num_sample):
+   293                                                   threshold, lhs_indices, rhs_indices = \
+   294    235370     14022309     59.6     23.5              split_by_threshold(pixel_diffs[i], min_split, np.random.rand())
+   295
+   296                                                   # IN CASE no 'threshold' satisfing the 'min_split' requirement was
+   297                                                   #         able to be computed -> exit.
+   298    235370       167873      0.7      0.3          if threshold is None: continue
+   299
+   300                                                   var_reduce = var_red_total - \
+   301    235290     16256276     69.1     27.3              var_red_xy(landmark_residual[lhs_indices]) - \
+   302    235289     15144031     64.4     25.4              var_red_xy(landmark_residual[rhs_indices])
+   303
+   304    235289       275328      1.2      0.5          if var_reduce > var_reduce_best or best_result == None:
+   305      3005         1933      0.6      0.0              var_reduce_best = var_reduce
+   306      3005         3667      1.2      0.0              best_result = (i, threshold, lhs_indices, rhs_indices)
+   307
+   308       470          401      0.9      0.0      assert best_result != None, "A best choice for the threshold was not found."
+   309       470          666      1.4      0.0      assert len(best_result[2]) >= min_split and len(best_result[3]) >= min_split, "Achieved a split with minimum number of nodes."
+   310
+   311                                               # Convert the local indices to global-all-images indices back again.
+   312       470          501      1.1      0.0      best_offsets = offsets[best_result[0]]
+   313       470          838      1.8      0.0      return [int(best_result[1]), best_offsets[0][0], best_offsets[0][1], \
+   314       470          642      1.4      0.0          best_offsets[1][0], best_offsets[1][0]],  \
+   315       470         1002      2.1      0.0          indices[best_result[2]], indices[best_result[3]]
