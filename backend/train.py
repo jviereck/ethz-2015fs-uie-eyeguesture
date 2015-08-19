@@ -31,7 +31,7 @@ param = {
     # Training image dimensions.
     'img_width': 384,
     'img_height': 286,
-    'num_sample': 500
+    'num_sample': 100
 }
 
 def flatten_list(aList):
@@ -254,6 +254,23 @@ def split_by_threshold(pixel_diffs, min_split, rand_val):
 
     return threshold, lhs_indices, rhs_indices
 
+def get_pixel_diffs(img_data, indices, approx_landmark, radius, img_width, img_height, num_sample):
+    offsets = []
+    pixel_diffs = []
+
+    for i in range(num_sample):
+        pixel_values_a, offset_a = get_random_offset_pixel_values(
+            img_data, indices, approx_landmark, radius, img_width, img_height)
+
+        pixel_values_b, offset_b = get_random_offset_pixel_values(
+            img_data, indices, approx_landmark, radius, img_width, img_height)
+
+        pixel_diff = pixel_values_a - pixel_values_b
+
+        offsets.append((offset_a, offset_b))
+        pixel_diffs.append(pixel_diff)
+
+    return pixel_diffs, offsets
 
 # Using the 'line_profiler' package.
 # SEE: http://www.huyng.com/posts/python-performance-analysis/
@@ -273,22 +290,8 @@ def compute_split_node(min_split, img_data, indices, full_landmark_residual,
 
     # Part 1: Compute random offsets and gather the pixel differences from the
     #   image data based on the offsets.
-
-    offsets = []
-    pixel_diffs = []
-
-    for i in range(num_sample):
-        pixel_values_a, offset_a = get_random_offset_pixel_values(
-            img_data, indices, approx_landmark, radius, img_width, img_height)
-
-        pixel_values_b, offset_b = get_random_offset_pixel_values(
-            img_data, indices, approx_landmark, radius, img_width, img_height)
-
-        pixel_diff = pixel_values_a - pixel_values_b
-
-        offsets.append((offset_a, offset_b))
-        pixel_diffs.append(pixel_diff)
-
+    pixel_diffs, offsets = get_pixel_diffs(img_data, indices, approx_landmark,
+        radius, img_width, img_height, num_sample)
 
     # Part 2: Look for the offset / trashold combination, that yields the best
     #   variance reduction.
@@ -405,6 +408,8 @@ class TreeClassifier:
         self.train_node(0, 0, img_data, param, radius, indices, \
             landmark_residual, landmark_approx)
 
+        import pdb; pdb.set_trace()
+
         return self.train_data_leafs
 
 class RandomForestClassifier:
@@ -500,12 +505,12 @@ if __name__ == '__main__':
         #       global variables *BEFORE* this invocation are also available
         #       to the forked child processes.
         # HACK: Work using 'map_async' to work around ctrl+c not terminating [1]
-        pool = Pool(processes=7)
-        res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
+        # pool = Pool(processes=7)
+        # res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
 
-        # res = []
-        # for mark_idx in range(landmarks.shape[1]):
-        #     res.append(train_random_forest(mark_idx))
+        res = []
+        for mark_idx in range(landmarks.shape[1]):
+            res.append(train_random_forest(mark_idx))
 
 
         # Get the concatinated global feature mapping PHI over all the single
