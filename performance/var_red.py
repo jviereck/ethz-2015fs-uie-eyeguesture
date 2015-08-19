@@ -129,3 +129,5 @@ if __name__ == '__main__':
   # run_test(var_red_python)
 
   run_test(var_red_c)
+
+  print '41849288.6171 << rougly expected result'
