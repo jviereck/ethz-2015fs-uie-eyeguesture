@@ -4,6 +4,7 @@ from scipy import misc
 import numpy as np
 import sys
 
+import time
 import unittest
 
 import matplotlib.pyplot as plt
@@ -13,7 +14,17 @@ from liblinear.liblinearutil import train as liblinear_train
 from liblinear.liblinear import problem as liblinear_problem
 from liblinear.liblinear import parameter as liblinear_parameter
 
-import time
+# ------------------------------------------------------------------------------
+# Import the optimized var-red function
+import ctypes
+var_red_lib = ctypes.CDLL('var_red.so')
+
+# IMPORTANT: Must specify the return type of the c-function. Otherwise python
+#    doesn't really pick it up correctly and the result is garbage!
+var_red_lib_fn = var_red_lib.var_red
+var_red_lib_fn.restype = ctypes.c_float
+# ------------------------------------------------------------------------------
+
 
 # A set of basic configurations for the learning
 param = {
@@ -130,8 +141,9 @@ def var_red(arr):
     if N == 0.0:
         return 0.0
 
-    n = np.tile(arr, N).reshape(-1, N)
-    return 0.5 * (1.0/N) * np.sum((n - n.T)**2)
+    # n = np.tile(arr, N).reshape(-1, N)
+    # return 0.5 * (1.0/N) * np.sum((n - n.T)**2)
+    return var_red_lib_fn(ctypes.c_int(len(arr)), ctypes.c_void_p(arr.ctypes.data))
 
 def var_red_xy(arr_xy):
     return np.sqrt(var_red(arr_xy[:,0]) ** 2 + var_red(arr_xy[:,1]) ** 2)
@@ -317,6 +329,9 @@ def compute_split_node(min_split, img_data, indices, full_landmark_residual,
 def assert_single_landmark(landmark):
     assert len(landmark.shape) == 2
     assert landmark.shape[1] == 2
+    # The external C-interfaces assume to get float32 values. Therefore, check
+    # if the type of the landmark array is also float32 to avoid future problems.
+    assert landmark.dtype == np.float32
 
 class TreeClassifier:
     def __init__(self, depth, debug=False):
@@ -449,6 +464,8 @@ Usage:
     print(usage)
 
 if __name__ == '__main__':
+    np.seterr(all='raise')
+
     if (len(sys.argv) <= 2):
         print_usage()
         print ''
@@ -482,10 +499,10 @@ if __name__ == '__main__':
         # NOTE: Creating the pool object here, such that ALL the local and
         #       global variables *BEFORE* this invocation are also available
         #       to the forked child processes.
-        pool = Pool(processes=7)
-
         # HACK: Work using 'map_async' to work around ctrl+c not terminating [1]
+        pool = Pool(processes=7)
         res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
+
         # res = []
         # for mark_idx in range(landmarks.shape[1]):
         #     res.append(train_random_forest(mark_idx))
@@ -518,12 +535,13 @@ if __name__ == '__main__':
             # 'w' column to the 'res' array.
             res.append(np.fromiter(model.w, dtype=np.double, count=global_feature_mapping.shape[1]))
 
-        W = np.vstack(res).T  # Glue together the entire 'W' matrix (*).
+        # Glue together the entire 'W' matrix (*).
+        W = np.vstack(res).T
 
         # Now that the global 'W' matrix was calculated, compute the shifts of the
         # landmarks by applying the binary global feature mapping to the matrix.
         # Need to reshape the result to a 2d vector again.
-        landmarks_shifts = np.dot(global_feature_mapping, W).reshape((-1, 20,2))
+        landmarks_shifts = np.dot(global_feature_mapping, W).reshape((-1, 20,2)).astype(np.float32)
 
         # Update the landmark approximations
         landmarks_approx = landmarks_approx + landmarks_shifts

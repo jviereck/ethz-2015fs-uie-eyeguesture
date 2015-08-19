@@ -63,5 +63,5 @@ float var_red(int N, float* arr)
     sum += vsum[i];
   }
 
-  return sum / (Nf * Nf) ;
+  return sum / Nf;
 }
