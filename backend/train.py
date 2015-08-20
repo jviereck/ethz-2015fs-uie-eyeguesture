@@ -142,7 +142,7 @@ def var_red(arr):
         return 0.0
 
     # n = np.tile(arr, N).reshape(-1, N)
-    # return 0.5 * (1.0/N) * np.sum((n - n.T)**2)
+    # return 0.5 * (1.0/N**2) * np.sum((n - n.T)**2)
     return var_red_lib_fn(ctypes.c_int(len(arr)), ctypes.c_void_p(arr.ctypes.data))
 
 def var_red_xy(arr_xy):
@@ -493,7 +493,7 @@ if __name__ == '__main__':
 
     # Example training for the first landmark over all images:
 
-    MAX_ITER = 10
+    MAX_ITER = 5
     for iter in range(MAX_ITER):
         radius = 20.0 - 1.5 * iter
 

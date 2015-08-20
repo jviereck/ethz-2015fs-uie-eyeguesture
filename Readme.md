@@ -6,7 +6,7 @@ To convert `.pgm` images (like the one from BioID) to `.png` images, run:
 
 ```bash
 $ cd tools
-$ python convert_pgm_png.py ../../bioid_data/BioID-FaceDatabase-V1.2
+$ python convert_pgm_png.py ../../data_bioid/BioID-FaceDatabase-V1.2
 ```
 
 This will convert the images and write them under `tools/`.
@@ -17,7 +17,7 @@ To generate a single `.csv` file from the bioid landmarks:
 
 ```bash
 $ cd tools
-$ python gather_points.py ../../bioid_data/points_20
+$ python gather_points.py ../../data_bioid/points_20
 ```
 
 Will write the file `tools/landmarks.csv`.
@@ -92,7 +92,7 @@ Training the system is done by invoking the `backend/train.py` python script and
 
 ```bash
 $ cd backend
-$ python train.py ../tools/landmarks_filtered.csv ../../bioid_data/BioID-FaceDatabase-V1.2
+$ python train.py ../tools/landmarks_filtered.csv ../../data_bioid/BioID-FaceDatabase-V1.2
 ```
 
 ## Running with line profiler enabled
@@ -111,7 +111,7 @@ def split_by_threshold(pixel_diffs, min_split, rand_val):
 and then start the program using:
 
 ```bash
-$ kernprof -l -v train.py ../tools/landmarks_filtered.csv ../../bioid_data/BioID-FaceDatabase-V1.2
+$ kernprof -l -v train.py ../tools/landmarks_filtered.csv ../../data_bioid/BioID-FaceDatabase-V1.2
 ```
 
 **NOTE:** Ensure the code runs in serial mode while profiling - aka.: disable the
@@ -125,4 +125,10 @@ $ kernprof -l -v train.py ../tools/landmarks_filtered.csv ../../bioid_data/BioID
 # Useful references
 
 - Face Alignment implementation using Matlab: https://github.com/jwyang/face-alignment
+
+# Findings
+
+- Turns out the variance reduction works much better when doing a `1/N` instead of `1/N**2`
+
+- Adjusting the cost/regularization variable during the optimization problem makes a huge difference!
 
