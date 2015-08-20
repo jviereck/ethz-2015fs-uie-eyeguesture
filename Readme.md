@@ -40,6 +40,16 @@ $ cd tools
 $ python copy_filtered_images.py
 ```
 
+## LFPW Dataset
+
+To download the online pictures, use the script at
+
+```bash
+$ cd src/tools/
+$ mkdir lfpw_downloads
+$ python lfpw_prepare.py ../../data_lfpw/kbvt_lfpw_v1_train.csv
+```
+
 ## Using liblinear
 
 To install the `liblinear` library on OSX using Homebrew, run:
@@ -117,6 +127,35 @@ $ kernprof -l -v train.py ../tools/landmarks_filtered.csv ../../data_bioid/BioID
 **NOTE:** Ensure the code runs in serial mode while profiling - aka.: disable the
 `pool.map_async` lines on the way.
 
+# Processing of the Helen dataset
+
+The Helen face database can be downloaded [here]((http://www.ifp.illinois.edu/~vuongle2/helen/).
+
+**NOTE:** At more detailed inspection the Helen dataset poses set of problems
+
+1. The annotations are not very precise. Infact, the lines are not following the eyes/lips very close and also the turning points (for example around the noise) are not always having the same number for the same point
+2. The dataset is missing the eye position
+
+
+
+## Combine Annotation Files
+
+To combine all the annotation information into a single CSV file, run the following command:
+
+```bash
+$ cd tools_helen
+$ python run annotations_gather.py ../../data_helen/annotation/
+```
+
+where `../../data_helen/annotation/` is the folder containing the individual annotation text files of the Helen dataset.
+
+## Example Point Annotation
+
+```bash
+$ cd tools_helen
+$ python run plot_landmarks.py ../../data_helen/images/
+```
+
 
 # TODOS
 
@@ -131,4 +170,20 @@ $ kernprof -l -v train.py ../tools/landmarks_filtered.csv ../../data_bioid/BioID
 - Turns out the variance reduction works much better when doing a `1/N` instead of `1/N**2`
 
 - Adjusting the cost/regularization variable during the optimization problem makes a huge difference!
+
+
+## TODO QUEUE
+
+- Take the downloaded LFPW pictures and create versions of them similar to the bioid_data ones. That means, generate images with 384x286 pixels for now
+
+- Use the [Helen](http://www.ifp.illinois.edu/~vuongle2/helen/) Dataset to learn a more high-quality/higher resolution classifier eventually ;)
+
+- Another image database with landmarks from [MIT](http://www.milbo.org/muct/)
+
+- Implement a simple but robust face detection algorithm
+
+- Look at the [300-W image collection](http://ibug.doc.ic.ac.uk/resources/300-W_IMAVIS/) for testdata input
+
+- Look at the [CMU](http://vasc.ri.cmu.edu//idb/html/face/frontal_images/index.html) face database
+
 

@@ -27,17 +27,22 @@ if __name__ == '__main__':
     adata = data[average_indices]              # average data
     idata = np.c_[range(len(adata)), adata]    # id-annotated data
 
+    np.savetxt('lfpw_downloads/idata.csv', idata, delimiter=",", fmt="%s")
+
     # Start with the download procedure
     for t in idata:
-        print 'Try to download %d / %d' % (int(t[0]) + 1, len(idata))
+        file_id = int(t[0])
+        print 'Try to download %d / %d: %s' % (file_id + 1, len(idata), t[1])
 
-        # SEE this StackOverflow about request library: http://stackoverflow.com/a/10744565
-        r = requests.get(t[1])
-        if r.status_code != 200:
+        try:
+            response = urllib2.urlopen(t[1], timeout=4)
+        except:
+            print '(... failed to download)'
             continue
 
-        output = open('lfpw_downloads/%04d.jpg'%(t[0]),'wb')
-        output.write(r.content)
+        output = open('lfpw_downloads/%04d.jpg' % (file_id),'wb')
+        output.write(response.read())
         output.close()
+
 
 
