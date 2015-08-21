@@ -9,9 +9,9 @@ import numpy as np
 import scipy
 
 
-# Based on: http://stackoverflow.com/a/12201744
-def rgb2gray(rgb):
-    return np.clip(np.dot(rgb[...,:3], [0.299, 0.587, 0.144]), 0, 255).astype('uint8')
+# # Based on: http://stackoverflow.com/a/12201744
+# def rgb2gray(rgb):
+#     return np.clip(np.dot(rgb[...,:3], [0.299, 0.587, 0.144]), 0, 255).astype('uint8')
 
 
 def show_img(img):
@@ -41,7 +41,7 @@ def clip_img(img, bbox):
 
 
 def extract_face(data, input_dir, file_name, img_id):
-    img = rgb2gray(scipy.misc.imread(join(input_dir, file_name)))
+    img = scipy.misc.imread(join(input_dir, file_name), flatten=True)
 
     d = data[img_id]
 
@@ -53,7 +53,7 @@ def extract_face(data, input_dir, file_name, img_id):
 
     eye_center = (d[RIGHT_EYE_IN] + d[LEFT_EYE_IN]) / 2
 
-    chin = d[CHIN]
+    chin = np.copy(d[CHIN])
     # Add a little bit of extra y-offset to make sure the chin-end is also covered.
     chin[1] += np.linalg.norm(eye_center - chin)*0.1
 
@@ -80,7 +80,8 @@ def extract_face(data, input_dir, file_name, img_id):
     # show_img(sub)
     scipy.misc.imsave(join(input_dir, 'face_%04d.png' % (img_id)), sub)
 
-    return d - np.array([l, t])
+    shifted_d = d - np.array([l, t])
+    np.savetxt(join(input_dir, 'face_meta_%04d.csv' % img_id), shifted_d, fmt="%0.3f", delimiter=",")
 
 
 
@@ -101,8 +102,8 @@ if __name__ == '__main__':
 
     for file_name in file_names:
         img_id = int(file_name[0:4])
-        d = extract_face(data, input_dir, file_name, img_id)
-        np.savetxt(join(input_dir, 'face_meta_%04d.csv' % img_id), d, fmt="%0.3f", delimiter=",")
+        extract_face(data, input_dir, file_name, img_id)
+
 
 
 
