@@ -25,7 +25,7 @@ if __name__ == '__main__':
     average_indices = np.where(data[:,1] == 'average')
 
     adata = data[average_indices]              # average data
-    idata = np.c_[range(len(adata)), adata]    # id-annotated data
+    idata = np.c_[range(len(adata)), adata[:,1:]]    # id-annotated data
 
     np.savetxt('lfpw_downloads/idata.csv', idata, delimiter=",", fmt="%s")
 
