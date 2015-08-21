@@ -27,7 +27,7 @@ if __name__ == '__main__':
     adata = data[average_indices]              # average data
     idata = np.c_[range(len(adata)), adata[:,1:]]    # id-annotated data
 
-    np.savetxt('lfpw_downloads/idata.csv', idata, delimiter=",", fmt="%s")
+    np.savetxt('lfpw_downloads/idata.csv', idata, delimiter="\t", fmt="%s")
 
     # Start with the download procedure
     for t in idata:
