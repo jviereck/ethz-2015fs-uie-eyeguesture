@@ -144,7 +144,14 @@ $ cd src/tools/
 $ python conv_idata_data.py image_train
 ```
 
+## Cut out the faces
 
+Place a set of images and then `data.csv` file from the previous step in a folder and use the script `extract_img_face.py` to extract the face images as grayscale-png and the adjusted landmarks in a `csv` file:
+
+```bash
+$ cd src/tools/
+$ python extract_img_face.py img_sub
+```
 
 # Processing of the Helen dataset
 
