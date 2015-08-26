@@ -61,21 +61,22 @@ def gen_train_img(input_dir, img_id):
     img_org = scipy.misc.imread(join(input_dir, 'face_%04d.png' % img_id), flatten=True)
 
     # Rescale the image in case it is too large for the current viewpoint.
-    h = img_org.shape[0]
+    s = h = img_org.shape[0]
     if h > 280:
-        img, landmarks = scale(img_org, landmarks_org, 260/h)
-        size = 260
+        img, landmarks = scale(img_org, landmarks_org, 260.0/h)
+        s = img.shape[0]
     else:
         img, landmarks = img_org, landmarks_org
-        size = h
 
     sub_id = 0
     sub_id = emit_train_img(img_id, sub_id, img, landmarks)
 
-    while size > 180:
-        size -= 20
-        img, landmarks = scale(img_org, landmarks_org, size / h)
+    # TODO: Rescale the original image in contrast to t
+    while s > 180:
+        s -= 30.0
+        img, landmarks = scale(img_org, landmarks_org, s / img_org.shape[0])
         sub_id = emit_train_img(img_id, sub_id, img, landmarks)
+
 
 
 if __name__ == '__main__':
