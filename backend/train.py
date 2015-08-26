@@ -258,6 +258,7 @@ def split_by_threshold(pixel_diffs, min_split, rand_val):
 
     return threshold, lhs_indices, rhs_indices
 
+
 def get_pixel_diffs(img_data, indices, approx_landmark, radius, img_width, img_height, num_sample):
     offsets = []
     pixel_diffs = []
@@ -276,11 +277,11 @@ def get_pixel_diffs(img_data, indices, approx_landmark, radius, img_width, img_h
 
     return pixel_diffs, offsets
 
+
 # To enable profiling on this function, use the 'line_profiler' package.
 # SEE: http://www.huyng.com/posts/python-performance-analysis/
 # @profile
-def compute_split_node(min_split, img_data, indices, full_landmark_residual,
-        full_approx_landmark, radius, num_sample, img_width, img_height):
+def compute_split_node(min_split, indices, full_landmark_residual, pixel_diffs, offsets):
     """Comptues a split node using random sampling.
     """
 
@@ -288,14 +289,11 @@ def compute_split_node(min_split, img_data, indices, full_landmark_residual,
 
     # Create a copy of the landmark data that is indiced by this function call.
     landmark_residual = full_landmark_residual[indices]
-    approx_landmark = full_approx_landmark[indices]
 
     assert indices.__class__ == np.ndarray, "Expect indices to be an np.array."
 
     # Part 1: Compute random offsets and gather the pixel differences from the
     #   image data based on the offsets.
-    pixel_diffs, offsets = get_pixel_diffs(img_data, indices, approx_landmark,
-        radius, img_width, img_height, num_sample)
 
     # Part 2: Look for the offset / trashold combination, that yields the best
     #   variance reduction.
@@ -308,7 +306,7 @@ def compute_split_node(min_split, img_data, indices, full_landmark_residual,
     var_reduce_best = 0
     best_result = None
 
-    for i in range(num_sample):
+    for i in range(len(pixel_diffs)):
         threshold, lhs_indices, rhs_indices = \
             split_by_threshold(pixel_diffs[i], min_split, np.random.rand())
 
@@ -333,12 +331,14 @@ def compute_split_node(min_split, img_data, indices, full_landmark_residual,
         best_offsets[1][0], best_offsets[1][0]],  \
         indices[best_result[2]], indices[best_result[3]]
 
+
 def assert_single_landmark(landmark):
     assert len(landmark.shape) == 2
     assert landmark.shape[1] == 2
     # The external C-interfaces assume to get float32 values. Therefore, check
     # if the type of the landmark array is also float32 to avoid future problems.
     assert landmark.dtype == np.float32
+
 
 class TreeClassifier:
     def __init__(self, depth, debug=False):
@@ -366,9 +366,13 @@ class TreeClassifier:
         # The number of minimal elements splitted to the right and to the left.
         min_split = pow(2, self.depth - level - 1)
 
+
+        pixel_diffs, offsets = get_pixel_diffs(img_data, indices, landmark_approx[indices],
+            radius, param['img_width'], param['img_height'], param['num_sample'])
+
+
         split_data, lhs_indices, rhs_indices = compute_split_node( \
-            min_split, img_data, indices, landmark_residual, landmark_approx, \
-            radius, param['num_sample'], param['img_width'], param['img_height'])
+            min_split, indices, landmark_residual, pixel_diffs, offsets)
 
         if self.debug:
             print split_data, lhs_indices, rhs_indices
