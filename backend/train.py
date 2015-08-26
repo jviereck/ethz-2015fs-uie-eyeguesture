@@ -85,12 +85,9 @@ def read_images(img_ids, img_root_path):
         assert data.shape[0] == param['img_height']
         assert data.shape[1] == param['img_width']
 
-        # Convert the image data to signed-int16 type and reshape to a single
-        # dimensional array to make indexing during pixel-feature computation
-        # easier.
-        return data.astype('int16').reshape(data.shape[0] * data.shape[1])
+        return VirtualImage(data, None)
 
-    return np.vstack(map(read_image, img_ids)).reshape(-1)
+    return map(read_image, img_ids)
 
 # ------------------------------------------------------------------------------
 # Random Tree Classifier
@@ -98,7 +95,7 @@ def read_images(img_ids, img_root_path):
 def sample_offset_vector(radius):
     radius = np.random.rand() * radius
     angle = np.random.rand() * 2. * np.pi
-    return np.array((radius * np.cos(angle), radius * np.sin(angle)))
+    return np.array((radius * np.cos(angle), radius * np.sin(angle), 1.0))
 
 def clip_cord(coordinate, img_width, img_height):
     return np.fmin(np.fmax(coordinate, [0, 0]), [img_width - 1, img_height - 1])
@@ -106,24 +103,31 @@ def clip_cord(coordinate, img_width, img_height):
 def get_random_offset_pixel_values(img_data, indices, approx_landmark, radius,
     img_width, img_height):
 
-    img_pixels = img_width * img_height
+    res = []
 
-    # Sample a random offset vector within the given radius.
-    offset = sample_offset_vector(radius)
+    # img_pixels = img_width * img_height
 
-    # Apply the offets to the approximated landmark positions and ensure the
-    # resulting positions are inside of the image.
-    pixel_targets = clip_cord(approx_landmark + offset, img_width, img_height)
+    # # Sample a random offset vector within the given radius.
+    offset = np.array([sample_offset_vector(radius)])
 
-    # Convert the 2d vector into a 1d vector for the image data lookup.
-    transform_1d = np.array((1, img_width))
-    pixel_targets_1d = np.fmin(np.round(pixel_targets.dot(transform_1d)), img_pixels - 1)
+    # # Apply the offets to the approximated landmark positions and ensure the
+    # # resulting positions are inside of the image.
+    # pixel_targets = clip_cord(approx_landmark + offset, img_width, img_height)
 
-    # Shift 1d vector from per-image coordinates to full img_data indices.
-    pixel_img_targets = pixel_targets_1d + (indices * img_pixels)
+    # # Convert the 2d vector into a 1d vector for the image data lookup.
+    # transform_1d = np.array((1, img_width))
+    # pixel_targets_1d = np.fmin(np.round(pixel_targets.dot(transform_1d)), img_pixels - 1)
 
-    # Lookup the values in the image data for the computed indices.
-    return img_data[pixel_img_targets.astype('int64')], offset
+    # # Shift 1d vector from per-image coordinates to full img_data indices.
+    # pixel_img_targets = pixel_targets_1d + (indices * img_pixels)
+
+    # # Lookup the values in the image data for the computed indices.
+    # return img_data[pixel_img_targets.astype('int64')], offset
+
+    for idx in indices:
+        res.append(img_data[idx].get_virt_pixel_values(offset)[0])
+
+    return np.array(res), offset[0]
 
 def compute_var(vector_2d):
     # Compute first the variance along the
@@ -272,7 +276,7 @@ def get_pixel_diffs(img_data, indices, approx_landmark, radius, img_width, img_h
 
     return pixel_diffs, offsets
 
-# Using the 'line_profiler' package.
+# To enable profiling on this function, use the 'line_profiler' package.
 # SEE: http://www.huyng.com/posts/python-performance-analysis/
 # @profile
 def compute_split_node(min_split, img_data, indices, full_landmark_residual,
@@ -434,6 +438,43 @@ class RandomForestClassifier:
         pass
 
 
+class VirtualImage:
+    """A image consuming coordinates in the virtual coordinate space."""
+
+    def __init__(self, data, translation=None):
+        assert len(data.shape) == 2 # Assume to get 2D data.
+
+        self.data = data.astype('int16').reshape(data.shape[0] * data.shape[1])
+        self.width = data.shape[1]
+        self.height = data.shape[0]
+
+        if translation is None:
+            self.translation = np.diag([1, 1, 1])
+        else:
+            self.translation = translation
+
+
+    """Converts an 2D array with virtual coordiantes into physical coordinates"""
+    def virt2phys(self, arr_virt):
+        assert arr_virt.shape[1] == 3 # Expecting a 3D vector with constant 1
+
+        p = self.translation.dot(arr_virt.T)
+
+        # Clip the x and y coordinates to the width and height of the picture.
+        return np.fmin(np.fmax(p, [0, 0]), [self.width - 1, self.height - 1])
+
+
+    def get_virt_pixel_values(self, arr_virt):
+        p = self.virt2phys(arr_virt)
+
+        # Convert the 2d vector into a 1d vector for the image data lookup.
+        transform_1d = np.array((1, self.width))
+        pixel_targets_1d = np.fmin(np.round(p.dot(transform_1d)), (self.width * self.height) - 1)
+
+        return self.data[pixel_targets_1d.astype('int64')] # Convert to int64 to get non-float indices
+
+
+
 def plot_data(img_index, img_data, landmarks, landmark_approx, name):
     DPI = 80
     img_width, img_height = float(param['img_width']), float(param['img_height'])
@@ -503,12 +544,12 @@ if __name__ == '__main__':
         #       global variables *BEFORE* this invocation are also available
         #       to the forked child processes.
         # HACK: Work using 'map_async' to work around ctrl+c not terminating [1]
-        pool = Pool(processes=7)
-        res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
+        # pool = Pool(processes=7)
+        # res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
 
-        # res = []
-        # for mark_idx in range(landmarks.shape[1]):
-        #     res.append(train_random_forest(mark_idx))
+        res = []
+        for mark_idx in range(landmarks.shape[1]):
+            res.append(train_random_forest(mark_idx))
 
 
         # Get the concatinated global feature mapping PHI over all the single
