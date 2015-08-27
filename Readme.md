@@ -144,7 +144,16 @@ $ cd src/tools/
 $ python conv_idata_data.py image_train
 ```
 
-## Cut out the faces
+## Extract face image data
+
+Place a set of images and then `data.csv` file from the previous step in a folder and use the script `face_detection.py` to extract the faces from the images and store them in a new file `data_faces.csv`
+
+```bash
+$ cd src/tools_lfpw/
+$ python face_detection.py
+```
+
+## Cut out the faces (OLD)
 
 Place a set of images and then `data.csv` file from the previous step in a folder and use the script `extract_img_face.py` to extract the face images as grayscale-png and the adjusted landmarks in a `csv` file:
 

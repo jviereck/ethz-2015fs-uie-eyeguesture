@@ -101,8 +101,8 @@ if __name__ == '__main__':
             # cv2.destroyAllWindows()
 
     # Write out the data file with additional face information.
-    np.savetxt('data_faces.csv', data, fmt="%0.3f")
-    print ''
+    np.savetxt(join(input_dir, 'data_faces.csv'), data, fmt="%0.3f", delimiter=',')
+    print
     print '--> Finished face detection and wrote data with faces to `data_faces.csv`'
 
 
