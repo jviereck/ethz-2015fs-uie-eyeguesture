@@ -54,6 +54,7 @@ def scale(fa, M):
         ])
     return r.dot(M)
 
+
 def flip_y(M):
     return np.array([
             [-1., 0., 0.],
@@ -61,6 +62,20 @@ def flip_y(M):
             [0.,  0., 1.]
         ]).dot(M)
 
+
+def emit(res, opp, landmarks_t):
+    # Compute the normalized landmarks - that means:
+    # 1. Center the landmarks to the center of the face
+    # 2. Normalize the size of the detected face to 100
+    # normalized_landmarks = (landmarks - face_center) / scale
+    normalized_landmarks = opp.dot(landmarks_t.T).T
+
+    res.append(np.r_[idx, normalized_landmarks[:, 0:2].reshape((-1)), np.linalg.inv(opp).reshape((-1))])
+
+    # Flip the normalized landmarks around the y-axis.
+    normalized_landmarks = horizontal_flip_landmarks(normalized_landmarks)
+    opp = flip_y(opp)
+    res.append(np.r_[idx, normalized_landmarks[:, 0:2].reshape((-1)), np.linalg.inv(opp).reshape((-1))])
 
 if __name__ == '__main__':
     # if (len(sys.argv) == 1):
@@ -80,6 +95,25 @@ if __name__ == '__main__':
     normalized = []
     res = []
 
+    ROT_ANGLE = 20.
+
+    variations = [
+        lambda M: M,
+
+        lambda M: rotate(ROT_ANGLE, M),
+        lambda M: rotate(-ROT_ANGLE, M),
+
+        lambda M: translate([ 5.,  5.], M),
+        lambda M: translate([-5.,  5.], M),
+        lambda M: translate([-5., -5.], M),
+        lambda M: translate([ 5., -5.], M),
+
+        lambda M: translate([ 5.,  5.], rotate(ROT_ANGLE, M)),
+        lambda M: translate([-5.,  5.], rotate(ROT_ANGLE, M)),
+        lambda M: translate([-5., -5.], rotate(ROT_ANGLE, M)),
+        lambda M: translate([ 5., -5.], rotate(ROT_ANGLE, M)),
+    ]
+
     for idx in face_idx:
         # NOTE: The entries 0:70 contain the landmarks provided by the LFPW db
         #       The entries 70:74 contain the (x, y, w, h) of the detected face
@@ -93,19 +127,9 @@ if __name__ == '__main__':
         # to support working with the 3D matrix
         landmarks_t = np.c_[landmarks, np.ones(landmarks.shape[0])]
 
+        for variation in variations:
+            emit(res, variation(opp), landmarks_t)
 
-        # Compute the normalized landmarks - that means:
-        # 1. Center the landmarks to the center of the face
-        # 2. Normalize the size of the detected face to 100
-        # normalized_landmarks = (landmarks - face_center) / scale
-        normalized_landmarks = opp.dot(landmarks_t.T).T
-
-        res.append(np.r_[idx, normalized_landmarks[:, 0:2].reshape((-1)), np.linalg.inv(opp).reshape((-1))])
-
-        # Flip the normalized landmarks around the y-axis.
-        normalized_landmarks = horizontal_flip_landmarks(normalized_landmarks)
-        opp = flip_y(opp)
-        res.append(np.r_[idx, normalized_landmarks[:, 0:2].reshape((-1)), np.linalg.inv(opp).reshape((-1))])
 
     res = np.array(res)
 

@@ -574,7 +574,7 @@ if __name__ == '__main__':
     # img_data = read_images(img_ids, sys.argv[2])
     # img_data_raw = read_images_raw(img_ids, sys.argv[2])
 
-    IMG_DEBUG_INDEX = [0, 1]
+    IMG_DEBUG_INDEX = [0, 2, 4, 6, 8, 10]
     # IMG_DEBUG_INDEX = [np.where(img_ids == i)[0][0] for i in [11, 58, 76, 1092, 1491]]
     plot_data(IMG_DEBUG_INDEX, img_data, landmarks, landmarks_approx, '0')
 
