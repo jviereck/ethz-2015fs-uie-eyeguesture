@@ -92,43 +92,6 @@ def read_images(img_ids, img_root_path):
 # ------------------------------------------------------------------------------
 # Random Tree Classifier
 
-def sample_offset_vector(radius):
-    radius = np.random.rand() * radius
-    angle = np.random.rand() * 2. * np.pi
-    return np.array((radius * np.cos(angle), radius * np.sin(angle), 1.0))
-
-def clip_cord(coordinate, img_width, img_height):
-    return np.fmin(np.fmax(coordinate, [0, 0]), [img_width - 1, img_height - 1])
-
-def get_random_offset_pixel_values(img_data, indices, approx_landmark, radius,
-    img_width, img_height):
-
-    res = []
-
-    # img_pixels = img_width * img_height
-
-    # # Sample a random offset vector within the given radius.
-    offset = np.array([sample_offset_vector(radius)])
-
-    # # Apply the offets to the approximated landmark positions and ensure the
-    # # resulting positions are inside of the image.
-    # pixel_targets = clip_cord(approx_landmark + offset, img_width, img_height)
-
-    # # Convert the 2d vector into a 1d vector for the image data lookup.
-    # transform_1d = np.array((1, img_width))
-    # pixel_targets_1d = np.fmin(np.round(pixel_targets.dot(transform_1d)), img_pixels - 1)
-
-    # # Shift 1d vector from per-image coordinates to full img_data indices.
-    # pixel_img_targets = pixel_targets_1d + (indices * img_pixels)
-
-    # # Lookup the values in the image data for the computed indices.
-    # return img_data[pixel_img_targets.astype('int64')], offset
-
-    for idx in indices:
-        res.append(img_data[idx].get_virt_pixel_values(offset)[0])
-
-    return np.array(res), offset[0]
-
 def compute_var(vector_2d):
     # Compute first the variance along the
     res = np.var(vector_2d, axis=1)
@@ -138,8 +101,7 @@ def var_red(arr):
     # Computes a single term in the formular at
     # http://en.wikipedia.org/wiki/Decision_tree_learning#Variance_reduction
 
-    # import pdb
-    # pdb.set_trace()
+    # import pdb; pdb.set_trace()
     N = float(len(arr))
 
     if N == 0.0:
@@ -259,23 +221,31 @@ def split_by_threshold(pixel_diffs, min_split, rand_val):
     return threshold, lhs_indices, rhs_indices
 
 
-def get_pixel_diffs(img_data, indices, approx_landmark, radius, img_width, img_height, num_sample):
+def sample_offset_vector(radius):
+    radius = np.random.rand() * radius
+    angle = np.random.rand() * 2. * np.pi
+    return np.array((radius * np.cos(angle), radius * np.sin(angle), 1.0))
+
+
+def get_pixel_diffs(img_data, indices, approx_landmark, radius, num_sample):
     offsets = []
-    pixel_diffs = []
+    pixel_diffs = np.zeros((num_sample, len(indices)))
 
-    for i in range(num_sample):
-        pixel_values_a, offset_a = get_random_offset_pixel_values(
-            img_data, indices, approx_landmark, radius, img_width, img_height)
+    for i in range(2 * num_sample):
+        offsets.append(sample_offset_vector(radius))
 
-        pixel_values_b, offset_b = get_random_offset_pixel_values(
-            img_data, indices, approx_landmark, radius, img_width, img_height)
+    offset_vec = np.array(offsets)
 
-        pixel_diff = pixel_values_a - pixel_values_b
+    for i, idx in enumerate(indices):
+        # HACK: Convert the 2D landmark vector to a 3D one here.
+        landmark = np.array([approx_landmark[idx][0], approx_landmark[idx][1], 0.0])
+        pixvals = img_data[idx].get_virt_pixel_values(landmark + offset_vec)
+        pixel_diffs[:,i] = pixvals[0:num_sample] - pixvals[num_sample:]
 
-        offsets.append((offset_a, offset_b))
-        pixel_diffs.append(pixel_diff)
 
-    return pixel_diffs, offsets
+    # HACK: Conver the 3D offset vector back to a 2D one and concat it.
+    offset_vec = offset_vec[:, 0:2]
+    return pixel_diffs, np.hstack((offset_vec[0:num_sample], offset_vec[num_sample:]))
 
 
 # To enable profiling on this function, use the 'line_profiler' package.
@@ -327,8 +297,9 @@ def compute_split_node(min_split, indices, full_landmark_residual, pixel_diffs, 
 
     # Convert the local indices to global-all-images indices back again.
     best_offsets = offsets[best_result[0]]
-    return [int(best_result[1]), best_offsets[0][0], best_offsets[0][1], \
-        best_offsets[1][0], best_offsets[1][0]],  \
+    # import pdb; pdb.set_trace()
+    return [int(best_result[1]), best_offsets[0], best_offsets[1], \
+        best_offsets[2], best_offsets[3]],  \
         indices[best_result[2]], indices[best_result[3]]
 
 
@@ -367,8 +338,8 @@ class TreeClassifier:
         min_split = pow(2, self.depth - level - 1)
 
 
-        pixel_diffs, offsets = get_pixel_diffs(img_data, indices, landmark_approx[indices],
-            radius, param['img_width'], param['img_height'], param['num_sample'])
+        pixel_diffs, offsets = get_pixel_diffs(img_data, indices, landmark_approx,
+            radius, param['num_sample'])
 
 
         split_data, lhs_indices, rhs_indices = compute_split_node( \
@@ -462,7 +433,8 @@ class VirtualImage:
     def virt2phys(self, arr_virt):
         assert arr_virt.shape[1] == 3 # Expecting a 3D vector with constant 1
 
-        p = self.translation.dot(arr_virt.T)
+        # import pdb; pdb.set_trace()
+        p = self.translation.dot(arr_virt.T)[0:2].T
 
         # Clip the x and y coordinates to the width and height of the picture.
         return np.fmin(np.fmax(p, [0, 0]), [self.width - 1, self.height - 1])
@@ -548,12 +520,12 @@ if __name__ == '__main__':
         #       global variables *BEFORE* this invocation are also available
         #       to the forked child processes.
         # HACK: Work using 'map_async' to work around ctrl+c not terminating [1]
-        # pool = Pool(processes=7)
-        # res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
+        pool = Pool(processes=7)
+        res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
 
-        res = []
-        for mark_idx in range(landmarks.shape[1]):
-            res.append(train_random_forest(mark_idx))
+        # res = []
+        # for mark_idx in range(landmarks.shape[1]):
+        #     res.append(train_random_forest(mark_idx))
 
 
         # Get the concatinated global feature mapping PHI over all the single
