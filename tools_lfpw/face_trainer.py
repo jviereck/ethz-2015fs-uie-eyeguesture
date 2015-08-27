@@ -81,6 +81,11 @@ if __name__ == '__main__':
             ])
         res.append(np.r_[idx, normalized_landmarks.reshape((-1)), m.reshape((-1))])
 
+    res = np.array(res)
+
+    # Remove the features for the ear.
+    res = np.c_[res[:,0:28*2+1], res[:, 69:]]
+
     np.savetxt(join(input_dir, 'data_faces_train.csv'), res, fmt="%0.3f", delimiter=',')
     print
     print '--> Wrote out face information for training -> `data_faces_train.csv`'

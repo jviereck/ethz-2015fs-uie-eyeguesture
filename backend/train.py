@@ -497,6 +497,7 @@ class VirtualImage:
         (l, t, r, b) = bbox.reshape(-1)
         if l > r:
             k = l; l = r; r = k;
+            bbox[0, 0] = bbox[1, 0]
 
         # HACK: Tried to scale the image using matplotlib - however, that didn't
         #   worked out at all :/ Therefore, doing manually scaling here.
@@ -526,15 +527,20 @@ def plot_data(img_index, img_data, landmarks, landmark_approx, name):
         img_idx = img_index[idx]
         img_data[img_idx].debug(ax, img_width, landmarks[img_idx], landmark_approx[img_idx])
 
-
     plt.savefig('train_round_%02d.png' % int(name), dpi=80)
 
+
 def train_random_forest(mark_idx):
-    print 'Train landmark %d/%d' % (mark_idx + 1, landmarks.shape[1])
+    # print 'Train landmark %d/%d' % (mark_idx + 1, landmarks.shape[1])
 
     # NOTE: depth = number of split nodes -> the leafs are on 'depth' level!
     rf = RandomForestClassifier(depth=3, n_tree=5)
     return rf.fit(img_data, param, radius, landmarks[:, mark_idx], landmarks_approx[:,mark_idx])
+
+
+def mean_var(vec_arr):
+    arr = np.linalg.norm(vec_arr.reshape(-1, 2), axis=1)
+    return np.mean(arr), np.var(arr)
 
 def print_usage():
     usage = """
@@ -568,28 +574,26 @@ if __name__ == '__main__':
     # img_data = read_images(img_ids, sys.argv[2])
     # img_data_raw = read_images_raw(img_ids, sys.argv[2])
 
-    IMG_DEBUG_INDEX = [0, 2, 4, 6, 8]
+    IMG_DEBUG_INDEX = [0, 1]
     # IMG_DEBUG_INDEX = [np.where(img_ids == i)[0][0] for i in [11, 58, 76, 1092, 1491]]
     plot_data(IMG_DEBUG_INDEX, img_data, landmarks, landmarks_approx, '0')
 
     # Example training for the first landmark over all images:
 
-    radii = [20., 17., 15., 13., 10., 9.]
+    radii = [20., 17., 5., 5., 5.]
     for (iter, radius) in enumerate(radii):
-        radius = 20.0 - 1.5 * iter
-
         log('Construct RandomForestClassifier (iter=%d/%d, radius=%.3f)' % (iter + 1, len(radii), radius))
 
         # NOTE: Creating the pool object here, such that ALL the local and
         #       global variables *BEFORE* this invocation are also available
         #       to the forked child processes.
         # HACK: Work using 'map_async' to work around ctrl+c not terminating [1]
-        # pool = Pool(processes=7)
-        # res = pool.map_async(train_random_forest, range(num_features)).get(9999999)
+        pool = Pool(processes=7)
+        res = pool.map_async(train_random_forest, range(num_features)).get(9999999)
 
-        res = []
-        for mark_idx in range(num_features):
-            res.append(train_random_forest(mark_idx))
+        # res = []
+        # for mark_idx in range(num_features):
+        #     res.append(train_random_forest(mark_idx))
 
 
         # Get the concatinated global feature mapping PHI over all the single
@@ -631,6 +635,9 @@ if __name__ == '__main__':
 
         # Update the landmark approximations
         landmarks_approx = landmarks_approx + landmarks_shifts
+
+        print '--> landmarks_shifts: mean=%.3f var=%.3f' % mean_var(landmarks_shifts)
+        print '--> landmarks error:  mean=%.3f var=%.3f' % mean_var((landmarks - landmarks_approx))
 
         # Create image log
         plot_data(IMG_DEBUG_INDEX, img_data, landmarks, landmarks_approx, str(iter + 1))
