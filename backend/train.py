@@ -502,9 +502,8 @@ class VirtualImage:
 
         # import pdb; pdb.set_trace()
 
-        # landmarks = self.virt2phys_2d(landmarks) - bbox[0]
-
-        # ax.plot(landmarks[:,0], landmarks[:,1], 'x')
+        landmarks = (self.virt2phys_2d(landmarks) - bbox[0]) * scale
+        ax.plot(landmarks[:,0], landmarks[:,1], 'x')
 
 
         # ax.axis([l, r, b-50, t-100])
