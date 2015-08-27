@@ -19,7 +19,7 @@ def horizontal_flip_landmarks(landmarks):
         res[a] = landmarks[b].copy()
         res[b] = landmarks[a].copy()
 
-    return (res * np.array((-1, 1)))
+    return (res * np.array((-1, 1, 1)))
 
 
 def print_usage():
@@ -28,6 +28,38 @@ Usage:
     %(cmd)s <input_dir>
             """ % {"cmd":sys.argv[0]}
     print(usage)
+
+def translate(arr, M):
+    r = np.array([
+            [1.0, 0.0, arr[0]],
+            [0.0, 1.0, arr[1]],
+            [0.0, 0.0, 1.]
+        ])
+    return r.dot(M)
+
+def rotate(angle, M):
+    rad = np.deg2rad(angle)
+    r = np.array([
+            [np.cos(rad),  -np.sin(rad), 0.0],
+            [np.sin(rad),   np.cos(rad), 0.0],
+            [        0.0,           0.0, 1.0]
+        ])
+    return r.dot(M)
+
+def scale(fa, M):
+    r = np.array([
+            [fa, 0., 0.],
+            [0., fa, 0.],
+            [0., 0., 1.]
+        ])
+    return r.dot(M)
+
+def flip_y(M):
+    return np.array([
+            [-1., 0., 0.],
+            [0.,  1., 0.],
+            [0.,  0., 1.]
+        ]).dot(M)
 
 
 if __name__ == '__main__':
@@ -54,32 +86,26 @@ if __name__ == '__main__':
         landmarks = data[idx, 0:70].reshape((-1, 2))
         face_center = data[idx, 70:72] + (data[idx, 72:74] / 2)
 
-        scale = data[idx, 72] / 100. # 'width of detected face' / '100 virtual size'
+        scale_factor = 100./ data[idx, 72] # '100 virtual size' / 'width of detected face'
+        opp = scale(scale_factor, translate(-face_center, np.diag((1, 1, 1))))
+
+        # Create a temporary version of the landmarks with a constant factor
+        # to support working with the 3D matrix
+        landmarks_t = np.c_[landmarks, np.ones(landmarks.shape[0])]
+
 
         # Compute the normalized landmarks - that means:
         # 1. Center the landmarks to the center of the face
         # 2. Normalize the size of the detected face to 100
-        normalized_landmarks = (landmarks - face_center) / scale
+        # normalized_landmarks = (landmarks - face_center) / scale
+        normalized_landmarks = opp.dot(landmarks_t.T).T
 
-        # Create the translation matrix that allows to remap the normalized
-        # landmarks to the physical image coordinate space.
-        (tx, ty) = face_center; sx = sy = scale
-        m = np.array([
-                [sx, 0., tx],
-                [0., sy, ty],
-                [0., 0., 1.]
-            ])
-
-        res.append(np.r_[idx, normalized_landmarks.reshape((-1)), m.reshape((-1))])
+        res.append(np.r_[idx, normalized_landmarks[:, 0:2].reshape((-1)), np.linalg.inv(opp).reshape((-1))])
 
         # Flip the normalized landmarks around the y-axis.
         normalized_landmarks = horizontal_flip_landmarks(normalized_landmarks)
-        m = np.array([
-                [-1. * sx, 0., tx],
-                [      0., sy, ty],
-                [      0., 0., 1.]
-            ])
-        res.append(np.r_[idx, normalized_landmarks.reshape((-1)), m.reshape((-1))])
+        opp = flip_y(opp)
+        res.append(np.r_[idx, normalized_landmarks[:, 0:2].reshape((-1)), np.linalg.inv(opp).reshape((-1))])
 
     res = np.array(res)
 
