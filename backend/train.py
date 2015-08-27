@@ -488,6 +488,9 @@ class VirtualImage:
     def debug(self, ax, img_dim, landmarks, landmark_approx):
         img_data = self.data.reshape(self.height, self.width)
 
+        # The following defines the window to plot around the face. For example
+        # the value '70' means to plot |--70--x--70--| (so 140) virtual sized
+        # window around the center of the detected face.
         win = np.array([70, 70])
         bbox = self.virt2phys_2d(np.array([-win, win]))
 
@@ -495,22 +498,20 @@ class VirtualImage:
         if l > r:
             k = l; l = r; r = k;
 
+        # HACK: Tried to scale the image using matplotlib - however, that didn't
+        #   worked out at all :/ Therefore, doing manually scaling here.
         scale = img_dim / (r - l)
         img_resized = misc.imresize(img_data[t:b, l:r], scale)
         ax.axis([0, img_dim, img_dim, 0])
         ax.imshow(img_resized, cmap=plt.get_cmap('gray'), aspect='auto')
 
-        # import pdb; pdb.set_trace()
-
+        # Also need to adjust the scaling of the landmarks and shift to the
+        # bounding box of the detected face.
         landmarks = (self.virt2phys_2d(landmarks) - bbox[0]) * scale
         ax.plot(landmarks[:,0], landmarks[:,1], 'x')
 
-
-        # ax.axis([l, r, b-50, t-100])
-        # ax.imshow(img_data, cmap=plt.get_cmap('gray'), aspect=None)
-        # landmarks = self.virt2phys_2d(landmarks)
-        # ax.plot(landmarks[:,0], landmarks[:,1], 'x')
-        # ax.plot(landmark_approx[img_idx,:,0], landmark_approx[img_idx,:,1], 'o')
+        landmark_approx = (self.virt2phys_2d(landmark_approx) - bbox[0]) * scale
+        ax.plot(landmark_approx[:,0], landmark_approx[:,1], 'o')
 
 
 def plot_data(img_index, img_data, landmarks, landmark_approx, name):
@@ -570,8 +571,6 @@ if __name__ == '__main__':
     IMG_DEBUG_INDEX = [0, 2, 4, 6, 8]
     # IMG_DEBUG_INDEX = [np.where(img_ids == i)[0][0] for i in [11, 58, 76, 1092, 1491]]
     plot_data(IMG_DEBUG_INDEX, img_data, landmarks, landmarks_approx, '0')
-
-    sys.exit(0)
 
     # Example training for the first landmark over all images:
 
