@@ -54,6 +54,36 @@ def log(task_name):
     _last_task = task_name
 
 
+def read_train_csv(input_dir):
+    img_data = []
+    data = np.genfromtxt(join(input_dir, 'data_faces_train.csv'), delimiter=',', dtype='f32')
+
+    num_features = (data.shape[1] - 1 - 9) / 2
+
+    # Read the actual image data.
+    img_data_dict = dict()
+    for img_id in np.unique(data[:, 0]):
+        img_data_dict[img_id] = misc.imread(join(input_dir, '%04d.jpg' % img_id), flatten=True)
+
+
+    # Create an VirtualImage for each entry.
+    # A 'VirtualImage' holds the image-pixel data and the translation matrix to
+    # map virtual coordinates to the underlying pixel coordinate system.
+    for entry in data:
+        # The last 9 entries of the data contain the transformation matrix.
+        img_data.append(VirtualImage(img_data_dict[entry[0]], entry[-9:].reshape((3, 3))))
+
+    # Get the landmarks and reshape to a N * (num_landmarks) * (x, y) dimensional array
+    landmarks = data[:, 1:-9].reshape(-1, num_features, 2)
+
+    # Get the mean of the read landmarks and use this as the initial guess for training.
+    mean = np.mean(landmarks, axis=0)
+    mean_flat = mean.reshape(2 * num_features)
+    approx_landmarks = np.tile(mean_flat, data.shape[0]).reshape(-1, num_features, 2)
+
+    return img_data, landmarks, approx_landmarks
+
+
 def read_landmark_csv(file_path):
     data = np.genfromtxt(file_path, delimiter=',', skip_header=1, dtype='f32')
     img_ids = data[:,0]
@@ -450,10 +480,27 @@ class VirtualImage:
         return self.data[pixel_targets_1d.astype('int64')] # Convert to int64 to get non-float indices
 
 
+    def debug(self, ax, landmarks, landmark_approx):
+        img_data = self.data.reshape(self.height, self.width)
+
+        vbbox = np.array([
+            [-55., -55., 0.],
+            [ 55.,  55., 0.]
+        ])
+        bbox = self.virt2phys(vbbox)
+
+        (l, t, r, b) = bbox.reshape(-1)
+        if l > r:
+            k = l; l = r; r = k;
+
+        ax.imshow(img_data[t:b, l:r], cmap=plt.get_cmap('gray'))
+        # ax.plot(landmarks[img_idx,:,0], landmarks[img_idx,:,1], 'x')
+        # ax.plot(landmark_approx[img_idx,:,0], landmark_approx[img_idx,:,1], 'o')
+
 
 def plot_data(img_index, img_data, landmarks, landmark_approx, name):
     DPI = 80
-    img_width, img_height = float(param['img_width']), float(param['img_height'])
+    img_width, img_height = 200, 200
     fig_size = (img_width / DPI * len(img_index), img_height / DPI)
     # fig_size = (len(img_index) * , )
     fig, axes = plt.subplots(1, len(img_index), sharey=True, figsize=fig_size) # , figsize=fig_size
@@ -463,9 +510,8 @@ def plot_data(img_index, img_data, landmarks, landmark_approx, name):
         img_idx = img_index[idx]
         ax.axis([0, img_width, img_height, 0])
         ax.set_aspect('equal')
-        ax.imshow(img_data[img_idx], cmap=plt.get_cmap('gray'))
-        ax.plot(landmarks[img_idx,:,0], landmarks[img_idx,:,1], 'x')
-        ax.plot(landmark_approx[img_idx,:,0], landmark_approx[img_idx,:,1], 'o')
+        img_data[img_idx].debug(ax, landmarks[img_idx], landmark_approx[img_idx])
+
 
     plt.savefig('train_round_%02d.png' % int(name), dpi=80)
 
@@ -479,14 +525,14 @@ def train_random_forest(mark_idx):
 def print_usage():
     usage = """
 Usage:
-    %(cmd)s <landmarks.csv-file> <image_root_path>
+    %(cmd)s <input-folder>
             """ % {"cmd":sys.argv[0]}
     print(usage)
 
 if __name__ == '__main__':
     np.seterr(all='raise')
 
-    if (len(sys.argv) <= 2):
+    if (len(sys.argv) <= 1):
         print_usage()
         print ''
 
@@ -499,33 +545,47 @@ if __name__ == '__main__':
     np.random.seed(42)
 
     log('Processing landmarks')
-    img_ids, landmarks, landmarks_approx = read_landmark_csv(sys.argv[1])
+    img_data, landmarks, landmarks_approx = read_train_csv(sys.argv[1])
+    num_features = landmarks.shape[1]
 
-    log('Loading image data')
-    img_data = read_images(img_ids, sys.argv[2])
-    img_data_raw = read_images_raw(img_ids, sys.argv[2])
+    vbbox = np.array([
+        [-55., -55., 0.],
+        [ 55.,  55., 0.]
+    ])
+    bbox = self.virt2phys(vbbox)
 
-    IMG_DEBUG_INDEX = [np.where(img_ids == i)[0][0] for i in [11, 58, 76, 1092, 1491]]
-    plot_data(IMG_DEBUG_INDEX, img_data_raw, landmarks, landmarks_approx, '0')
+    (l, t, r, b) = bbox.reshape(-1)
+
+    sys.exit(0)
+
+    # img_ids, landmarks, landmarks_approx = read_landmark_csv(sys.argv[1])
+
+    # log('Loading image data')
+    # img_data = read_images(img_ids, sys.argv[2])
+    # img_data_raw = read_images_raw(img_ids, sys.argv[2])
+
+    IMG_DEBUG_INDEX = [0, 2, 4, 6, 8]
+    # IMG_DEBUG_INDEX = [np.where(img_ids == i)[0][0] for i in [11, 58, 76, 1092, 1491]]
+    plot_data(IMG_DEBUG_INDEX, img_data, landmarks, landmarks_approx, '0')
 
     # Example training for the first landmark over all images:
 
-    MAX_ITER = 5
-    for iter in range(MAX_ITER):
+    radii = [20., 17., 15., 13., 10., 9.]
+    for (iter, radius) in enumerate(radii):
         radius = 20.0 - 1.5 * iter
 
-        log('Construct RandomForestClassifier (iter=%d/%d, radius=%.3f)' % (iter + 1, MAX_ITER, radius))
+        log('Construct RandomForestClassifier (iter=%d/%d, radius=%.3f)' % (iter + 1, len(radii), radius))
 
         # NOTE: Creating the pool object here, such that ALL the local and
         #       global variables *BEFORE* this invocation are also available
         #       to the forked child processes.
         # HACK: Work using 'map_async' to work around ctrl+c not terminating [1]
-        pool = Pool(processes=7)
-        res = pool.map_async(train_random_forest, range(landmarks.shape[1])).get(9999999)
+        # pool = Pool(processes=7)
+        # res = pool.map_async(train_random_forest, range(num_features)).get(9999999)
 
-        # res = []
-        # for mark_idx in range(landmarks.shape[1]):
-        #     res.append(train_random_forest(mark_idx))
+        res = []
+        for mark_idx in range(num_features):
+            res.append(train_random_forest(mark_idx))
 
 
         # Get the concatinated global feature mapping PHI over all the single
@@ -534,11 +594,13 @@ if __name__ == '__main__':
 
         log('Compute global regression matrix')
 
-        landmarks_residual = (landmarks - landmarks_approx).reshape(-1, 40)
+        # import pdb; pdb.set_trace()
+
+        landmarks_residual = (landmarks - landmarks_approx).reshape(-1, num_features * 2)
 
         # How to call into liblinear is mostly inspired by:
         # https://github.com/jwyang/face-alignment/blob/master/src/globalregression.m
-        cost = 10.0/global_feature_mapping.shape[1]
+        cost = 10.0 / global_feature_mapping.shape[1]
         x_list = global_feature_mapping.tolist()
 
         # Note: Instead of solving the entire matrix system at once here, solving
@@ -561,13 +623,13 @@ if __name__ == '__main__':
         # Now that the global 'W' matrix was calculated, compute the shifts of the
         # landmarks by applying the binary global feature mapping to the matrix.
         # Need to reshape the result to a 2d vector again.
-        landmarks_shifts = np.dot(global_feature_mapping, W).reshape((-1, 20,2)).astype(np.float32)
+        landmarks_shifts = np.dot(global_feature_mapping, W).reshape((-1, num_features, 2)).astype(np.float32)
 
         # Update the landmark approximations
         landmarks_approx = landmarks_approx + landmarks_shifts
 
         # Create image log
-        plot_data(IMG_DEBUG_INDEX, img_data_raw, landmarks, landmarks_approx, str(iter + 1))
+        plot_data(IMG_DEBUG_INDEX, img_data, landmarks, landmarks_approx, str(iter + 1))
 
     log_finish()
 

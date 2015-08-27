@@ -66,7 +66,8 @@ if __name__ == '__main__':
         (tx, ty) = face_center; sx = sy = scale
         m = np.array([
                 [sx, 0., tx],
-                [0., sy, ty]
+                [0., sy, ty],
+                [0., 0., 1.]
             ])
 
         res.append(np.r_[idx, normalized_landmarks.reshape((-1)), m.reshape((-1))])
@@ -75,7 +76,8 @@ if __name__ == '__main__':
         normalized_landmarks = horizontal_flip_landmarks(normalized_landmarks)
         m = np.array([
                 [-1. * sx, 0., tx],
-                [      0., sy, ty]
+                [      0., sy, ty],
+                [      0., 0., 1.]
             ])
         res.append(np.r_[idx, normalized_landmarks.reshape((-1)), m.reshape((-1))])
 
