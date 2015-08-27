@@ -6,43 +6,6 @@ from os.path import isfile, join
 import numpy as np
 
 
-# Landmarks idx and their interpretation. (Taken from http://neerajkumar.org/databases/lfpw/)
-#
-#   00. left_eyebrow_out
-#   01. right_eyebrow_out
-#   02. left_eyebrow_in
-#   03. right_eyebrow_in
-#   04. left_eyebrow_center_top
-#   05. left_eyebrow_center_bottom
-#   06. right_eyebrow_center_top
-#   07. right_eyebrow_center_bottom
-#   08. left_eye_out
-#   09. right_eye_out
-#   10. left_eye_in
-#   11. right_eye_in
-#   12. left_eye_center_top
-#   13. left_eye_center_bottom
-#   14. right_eye_center_top
-#   15. right_eye_center_bottom
-#   16. left_eye_pupil
-#   17. right_eye_pupil
-#   18. left_nose_out
-#   19. right_nose_out
-#   20. nose_center_top
-#   21. nose_center_bottom
-#   22. left_mouth_out
-#   23. right_mouth_out
-#   24. mouth_center_top_lip_top
-#   25. mouth_center_top_lip_bottom
-#   26. mouth_center_bottom_lip_top
-#   27. mouth_center_bottom_lip_bottom
-#   28. left_ear_top
-#   29. right_ear_top
-#   30. left_ear_bottom
-#   31. right_ear_bottom
-#   32. left_ear_canal
-#   33. right_ear_canal
-#   34. chin
 def horizontal_flip_landmarks(landmarks):
     assert len(landmarks.shape) == 2 # Assume to get 2D vector
 
@@ -83,24 +46,42 @@ if __name__ == '__main__':
     face_idx = np.where(data[:, 70] != 0)[0]
 
     normalized = []
+    res = []
 
     for idx in face_idx:
+        # NOTE: The entries 0:70 contain the landmarks provided by the LFPW db
+        #       The entries 70:74 contain the (x, y, w, h) of the detected face
         landmarks = data[idx, 0:70].reshape((-1, 2))
         face_center = data[idx, 70:72] + (data[idx, 72:74] / 2)
+
+        scale = data[idx, 72] / 100. # 'width of detected face' / '100 virtual size'
 
         # Compute the normalized landmarks - that means:
         # 1. Center the landmarks to the center of the face
         # 2. Normalize the size of the detected face to 100
-        normalized_landmarks = (landmarks - face_center) / (data[idx, 72] / 100.)
+        normalized_landmarks = (landmarks - face_center) / scale
 
-        normalized.append(normalized_landmarks)
-        normalized.append(horizontal_flip_landmarks(normalized_landmarks))
+        # Create the translation matrix that allows to remap the normalized
+        # landmarks to the physical image coordinate space.
+        (tx, ty) = face_center; sx = sy = scale
+        m = np.array([
+                [sx, 0., tx],
+                [0., sy, ty]
+            ])
 
-    res = np.mean(np.array(normalized), axis=0)
+        res.append(np.r_[idx, normalized_landmarks.reshape((-1)), m.reshape((-1))])
 
-    np.savetxt(join(input_dir, 'data_faces_norm_mean.csv'), res, fmt="%0.3f", delimiter=',')
+        # Flip the normalized landmarks around the y-axis.
+        normalized_landmarks = horizontal_flip_landmarks(normalized_landmarks)
+        m = np.array([
+                [-1. * sx, 0., tx],
+                [      0., sy, ty]
+            ])
+        res.append(np.r_[idx, normalized_landmarks.reshape((-1)), m.reshape((-1))])
+
+    np.savetxt(join(input_dir, 'data_faces_train.csv'), res, fmt="%0.3f", delimiter=',')
     print
-    print '--> Finished face normalization and mean computatation -> `data_faces_norm_mean.csv`'
+    print '--> Wrote out face information for training -> `data_faces_train.csv`'
 
 
 
