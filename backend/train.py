@@ -458,10 +458,15 @@ class VirtualImage:
         else:
             self.translation = translation
 
+    def virt2phys_2d(self, arr_virt):
+        assert arr_virt.shape[1] == 2 # Expecting a 2D vector with constant 1
+
+        return self.virt2phys(np.c_[arr_virt, np.ones(arr_virt.shape[0])])
 
     """Converts an 2D array with virtual coordiantes into physical coordinates"""
     def virt2phys(self, arr_virt):
         assert arr_virt.shape[1] == 3 # Expecting a 3D vector with constant 1
+        assert len(np.where(arr_virt[:, 2] != 1.0)[0]) == 0
 
         # import pdb; pdb.set_trace()
         p = self.translation.dot(arr_virt.T)[0:2].T
@@ -480,27 +485,38 @@ class VirtualImage:
         return self.data[pixel_targets_1d.astype('int64')] # Convert to int64 to get non-float indices
 
 
-    def debug(self, ax, landmarks, landmark_approx):
+    def debug(self, ax, img_dim, landmarks, landmark_approx):
         img_data = self.data.reshape(self.height, self.width)
 
-        vbbox = np.array([
-            [-55., -55., 0.],
-            [ 55.,  55., 0.]
-        ])
-        bbox = self.virt2phys(vbbox)
+        win = np.array([70, 70])
+        bbox = self.virt2phys_2d(np.array([-win, win]))
 
         (l, t, r, b) = bbox.reshape(-1)
         if l > r:
             k = l; l = r; r = k;
 
-        ax.imshow(img_data[t:b, l:r], cmap=plt.get_cmap('gray'))
-        # ax.plot(landmarks[img_idx,:,0], landmarks[img_idx,:,1], 'x')
+        scale = img_dim / (r - l)
+        img_resized = misc.imresize(img_data[t:b, l:r], scale)
+        ax.axis([0, img_dim, img_dim, 0])
+        ax.imshow(img_resized, cmap=plt.get_cmap('gray'), aspect='auto')
+
+        # import pdb; pdb.set_trace()
+
+        # landmarks = self.virt2phys_2d(landmarks) - bbox[0]
+
+        # ax.plot(landmarks[:,0], landmarks[:,1], 'x')
+
+
+        # ax.axis([l, r, b-50, t-100])
+        # ax.imshow(img_data, cmap=plt.get_cmap('gray'), aspect=None)
+        # landmarks = self.virt2phys_2d(landmarks)
+        # ax.plot(landmarks[:,0], landmarks[:,1], 'x')
         # ax.plot(landmark_approx[img_idx,:,0], landmark_approx[img_idx,:,1], 'o')
 
 
 def plot_data(img_index, img_data, landmarks, landmark_approx, name):
     DPI = 80
-    img_width, img_height = 200, 200
+    img_width, img_height = 200., 200.
     fig_size = (img_width / DPI * len(img_index), img_height / DPI)
     # fig_size = (len(img_index) * , )
     fig, axes = plt.subplots(1, len(img_index), sharey=True, figsize=fig_size) # , figsize=fig_size
@@ -508,9 +524,7 @@ def plot_data(img_index, img_data, landmarks, landmark_approx, name):
 
     for idx, ax in enumerate(axes):
         img_idx = img_index[idx]
-        ax.axis([0, img_width, img_height, 0])
-        ax.set_aspect('equal')
-        img_data[img_idx].debug(ax, landmarks[img_idx], landmark_approx[img_idx])
+        img_data[img_idx].debug(ax, img_width, landmarks[img_idx], landmark_approx[img_idx])
 
 
     plt.savefig('train_round_%02d.png' % int(name), dpi=80)
@@ -548,16 +562,6 @@ if __name__ == '__main__':
     img_data, landmarks, landmarks_approx = read_train_csv(sys.argv[1])
     num_features = landmarks.shape[1]
 
-    vbbox = np.array([
-        [-55., -55., 0.],
-        [ 55.,  55., 0.]
-    ])
-    bbox = self.virt2phys(vbbox)
-
-    (l, t, r, b) = bbox.reshape(-1)
-
-    sys.exit(0)
-
     # img_ids, landmarks, landmarks_approx = read_landmark_csv(sys.argv[1])
 
     # log('Loading image data')
@@ -567,6 +571,8 @@ if __name__ == '__main__':
     IMG_DEBUG_INDEX = [0, 2, 4, 6, 8]
     # IMG_DEBUG_INDEX = [np.where(img_ids == i)[0][0] for i in [11, 58, 76, 1092, 1491]]
     plot_data(IMG_DEBUG_INDEX, img_data, landmarks, landmarks_approx, '0')
+
+    sys.exit(0)
 
     # Example training for the first landmark over all images:
 
