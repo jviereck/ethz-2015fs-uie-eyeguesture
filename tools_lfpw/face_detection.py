@@ -93,6 +93,7 @@ if __name__ == '__main__':
             print faces
             print nose_x, nose_y
         else:
+            # print face, data[id,40:42]
             (x,y,w,h) = data[id, 70:] = face
 
             # cv2.rectangle(img,(x,y),(x+w,y+h),(255,0,0),2)

@@ -26,14 +26,6 @@ var_red_lib_fn.restype = ctypes.c_float
 # ------------------------------------------------------------------------------
 
 
-# A set of basic configurations for the learning
-param = {
-    # Training image dimensions.
-    'img_width': 384,
-    'img_height': 286,
-    'num_sample': 100
-}
-
 def flatten_list(aList):
     return [y for x in aList for y in x]
 
@@ -63,7 +55,10 @@ def read_train_csv(input_dir):
     # Read the actual image data.
     img_data_dict = dict()
     for img_id in np.unique(data[:, 0]):
-        img_data_dict[img_id] = misc.imread(join(input_dir, '%04d.jpg' % img_id), flatten=True)
+        gray_img = misc.imread(join(input_dir, '%04d.jpg' % img_id), flatten=True)
+        (height, width) = gray_img.shape
+        gray_img = gray_img.astype('int16').reshape(gray_img.shape[0] * gray_img.shape[1])
+        img_data_dict[img_id] = (gray_img, width, height)
 
 
     # Create an VirtualImage for each entry.
@@ -71,7 +66,8 @@ def read_train_csv(input_dir):
     # map virtual coordinates to the underlying pixel coordinate system.
     for entry in data:
         # The last 9 entries of the data contain the transformation matrix.
-        img_data.append(VirtualImage(img_data_dict[entry[0]], entry[-9:].reshape((3, 3))))
+        t = img_data_dict[entry[0]]
+        img_data.append(VirtualImage(t[0], t[1], t[2], entry[-9:].reshape((3, 3))))
 
     # Get the landmarks and reshape to a N * (num_landmarks) * (x, y) dimensional array
     landmarks = data[:, 1:-9].reshape(-1, num_features, 2)
@@ -99,25 +95,18 @@ def read_landmark_csv(file_path):
 
     return img_ids, landmarks, approx_landmarks
 
-def read_images_raw(img_ids, img_root_path):
-    def read_image(img_id):
-        # Read the image data.
-        return misc.imread(join(img_root_path, 'BioID_%04d.pgm' % (img_id)))
+def store_rf_get_global_features(iter, res):
+    features = []
+    serialized_trees = []
 
-    return map(read_image, img_ids)
+    for entry in res:
+        feature, ser = entry
+        features.append(feature)
+        serialized_trees.append(ser)
 
-def read_images(img_ids, img_root_path):
-    def read_image(img_id):
-        # Read the image data.
-        data = misc.imread(join(img_root_path, 'BioID_%04d.pgm' % (img_id)))
+    np.savez_compressed(join('trained_output', '%d_rf' % (iter)), np.array(features).reshape(-1).astype(np.float32))
 
-        # Check the image we get fits the expected dimensions.
-        assert data.shape[0] == param['img_height']
-        assert data.shape[1] == param['img_width']
-
-        return VirtualImage(data, None)
-
-    return map(read_image, img_ids)
+    return np.hstack(features)
 
 # ------------------------------------------------------------------------------
 # Random Tree Classifier
@@ -342,6 +331,13 @@ def assert_single_landmark(landmark):
 
 
 class TreeClassifier:
+    """
+    @param(depth): The depth counts the first root note as well.
+        EXAMPLE for depth=3:
+           0
+         1   2
+        3 4 5 6
+    """
     def __init__(self, depth, debug=False):
         self.depth = depth
         self.debug = debug
@@ -371,14 +367,13 @@ class TreeClassifier:
         pixel_diffs, offsets = get_pixel_diffs(img_data, indices, landmark_approx,
             radius, param['num_sample'])
 
-
-        split_data, lhs_indices, rhs_indices = compute_split_node( \
+        split_data, lhs_indices, rhs_indices = compute_split_node(\
             min_split, indices, landmark_residual, pixel_diffs, offsets)
 
         if self.debug:
             print split_data, lhs_indices, rhs_indices
 
-        self.node_data[idx] = split_data
+        self.split_data[idx*5:((idx+1)*5)] = split_data
 
         idx_lhs, idx_rhs = self.get_child_idx(level, idx)
 
@@ -401,8 +396,8 @@ class TreeClassifier:
         assert_single_landmark(landmark)
         assert_single_landmark(landmark_approx)
 
-        # Need to have 'depth - 1' node_data only, as the leafs don't have
-        self.node_data = range(pow(2, self.depth) - 1) # Allocate list for later node data
+        # Need to have 'depth - 1' split_data only, as the leafs don't have
+        self.split_data = np.zeros((pow(2, self.depth) - 1) * 5) # Allocate list for later node data
 
         # Allocate matrix that will hold the binary local features for this tree.
         # The entires are set when the leafs are reached during the call to 'train_node'.
@@ -438,20 +433,20 @@ class RandomForestClassifier:
         return np.hstack(res);
 
     def serialize(self):
-        # TODO: Convert the node_data on the trees into a JSON format for later
-        #   reloading / classification in the browser.
-        pass
+        res = []
+        for tree in self.tree_classifiers:
+            res.append(tree.split_data)
+
+        return np.array(tree.split_data).reshape(-1)
 
 
 class VirtualImage:
     """A image consuming coordinates in the virtual coordinate space."""
 
-    def __init__(self, data, translation=None):
-        assert len(data.shape) == 2 # Assume to get 2D data.
-
-        self.data = data.astype('int16').reshape(data.shape[0] * data.shape[1])
-        self.width = data.shape[1]
-        self.height = data.shape[0]
+    def __init__(self, data, width, height, translation=None):
+        self.data = data
+        self.width = width
+        self.height = height
 
         if translation is None:
             self.translation = np.diag([1, 1, 1])
@@ -531,11 +526,13 @@ def plot_data(img_index, img_data, landmarks, landmark_approx, name):
 
 
 def train_random_forest(mark_idx):
-    # print 'Train landmark %d/%d' % (mark_idx + 1, landmarks.shape[1])
+    print 'Train landmark %d/%d' % (mark_idx + 1, landmarks.shape[1])
 
     # NOTE: depth = number of split nodes -> the leafs are on 'depth' level!
-    rf = RandomForestClassifier(depth=3, n_tree=5)
-    return rf.fit(img_data, param, radius, landmarks[:, mark_idx], landmarks_approx[:,mark_idx])
+    rf = RandomForestClassifier(depth=TRAIN_PARAM['tree_depth'], n_tree=TRAIN_PARAM['tree_count'])
+    res = rf.fit(img_data, TRAIN_PARAM, radius, landmarks[:, mark_idx], landmarks_approx[:,mark_idx])
+
+    return res, rf.serialize()
 
 
 def mean_var(vec_arr):
@@ -564,25 +561,30 @@ if __name__ == '__main__':
     # Fix the random seed to get reproducable results.
     np.random.seed(42)
 
-    log('Processing landmarks')
+    log('Reading landmarks and images')
     img_data, landmarks, landmarks_approx = read_train_csv(sys.argv[1])
     num_features = landmarks.shape[1]
 
-    # img_ids, landmarks, landmarks_approx = read_landmark_csv(sys.argv[1])
 
-    # log('Loading image data')
-    # img_data = read_images(img_ids, sys.argv[2])
-    # img_data_raw = read_images_raw(img_ids, sys.argv[2])
+    TRAIN_PARAM = {
+        'radii': [20., 17., 5., 5., 5.],
+        'num_sample': 100,
+        'tree_depth': 3,
+        'tree_count': 5
+    }
 
-    IMG_DEBUG_INDEX = [0, 2, 4, 6, 8, 10]
-    # IMG_DEBUG_INDEX = [np.where(img_ids == i)[0][0] for i in [11, 58, 76, 1092, 1491]]
+    IMG_DEBUG_INDEX = np.array([0, 2, 4])
+    # IMG_DEBUG_INDEX = np.array([0, 1, 2, 3, 4, 5]) * 25
     plot_data(IMG_DEBUG_INDEX, img_data, landmarks, landmarks_approx, '0')
 
-    # Example training for the first landmark over all images:
+    np.savez_compressed(join('trained_output', 'initial_shape'), landmarks_approx[0].reshape(-1))
+    np.savez_compressed(join('trained_output', 'configuration'), np.array([
+        num_features, TRAIN_PARAM['tree_depth'], TRAIN_PARAM['tree_count']
+    ]))
 
-    radii = [20., 17., 5., 5., 5.]
-    for (iter, radius) in enumerate(radii):
-        log('Construct RandomForestClassifier (iter=%d/%d, radius=%.3f)' % (iter + 1, len(radii), radius))
+    # Example training for the first landmark over all images:
+    for (iter, radius) in enumerate(TRAIN_PARAM['radii']):
+        log('Construct RandomForestClassifier (iter=%d/%d, radius=%.3f)' % (iter + 1, len(TRAIN_PARAM['radii']), radius))
 
         # NOTE: Creating the pool object here, such that ALL the local and
         #       global variables *BEFORE* this invocation are also available
@@ -595,10 +597,9 @@ if __name__ == '__main__':
         # for mark_idx in range(num_features):
         #     res.append(train_random_forest(mark_idx))
 
-
         # Get the concatinated global feature mapping PHI over all the single
         # landmarks local binary features
-        global_feature_mapping = np.hstack(res)
+        global_feature_mapping = store_rf_get_global_features(iter, res)
 
         log('Compute global regression matrix')
 
@@ -626,7 +627,9 @@ if __name__ == '__main__':
             res.append(np.fromiter(model.w, dtype=np.double, count=global_feature_mapping.shape[1]))
 
         # Glue together the entire 'W' matrix (*).
-        W = np.vstack(res).T
+        W = np.vstack(res).T.astype(np.float32)
+
+        np.savez_compressed(join('trained_output', '%d_w' % iter), W)
 
         # Now that the global 'W' matrix was calculated, compute the shifts of the
         # landmarks by applying the binary global feature mapping to the matrix.

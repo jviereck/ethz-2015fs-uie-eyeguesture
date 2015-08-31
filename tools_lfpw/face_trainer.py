@@ -63,7 +63,7 @@ def flip_y(M):
         ]).dot(M)
 
 
-def emit(res, opp, landmarks_t):
+def emit(idx, res, opp, landmarks_t):
     # Compute the normalized landmarks - that means:
     # 1. Center the landmarks to the center of the face
     # 2. Normalize the size of the detected face to 100
@@ -103,15 +103,15 @@ if __name__ == '__main__':
         lambda M: rotate(ROT_ANGLE, M),
         lambda M: rotate(-ROT_ANGLE, M),
 
-        lambda M: translate([ 5.,  5.], M),
-        lambda M: translate([-5.,  5.], M),
-        lambda M: translate([-5., -5.], M),
-        lambda M: translate([ 5., -5.], M),
+        # lambda M: translate([ 5.,  5.], M),
+        # lambda M: translate([-5.,  5.], M),
+        # lambda M: translate([-5., -5.], M),
+        # lambda M: translate([ 5., -5.], M),
 
-        lambda M: translate([ 5.,  5.], rotate(ROT_ANGLE, M)),
-        lambda M: translate([-5.,  5.], rotate(ROT_ANGLE, M)),
-        lambda M: translate([-5., -5.], rotate(ROT_ANGLE, M)),
-        lambda M: translate([ 5., -5.], rotate(ROT_ANGLE, M)),
+        # lambda M: translate([ 5.,  5.], rotate(ROT_ANGLE, M)),
+        # lambda M: translate([-5.,  5.], rotate(ROT_ANGLE, M)),
+        # lambda M: translate([-5., -5.], rotate(ROT_ANGLE, M)),
+        # lambda M: translate([ 5., -5.], rotate(ROT_ANGLE, M)),
     ]
 
     for idx in face_idx:
@@ -128,7 +128,7 @@ if __name__ == '__main__':
         landmarks_t = np.c_[landmarks, np.ones(landmarks.shape[0])]
 
         for variation in variations:
-            emit(res, variation(opp), landmarks_t)
+            emit(idx, res, variation(opp), landmarks_t)
 
 
     res = np.array(res)
